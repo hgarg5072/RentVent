@@ -428,3 +428,37 @@ body.picking-pin #map { cursor: crosshair !important; }
 .right-pill { right: var(--gap); top: var(--gap); }
 .bottom-pill { bottom: var(--gap); left: 50%; transform: translateX(-50%); border-color: #38bdf8; }
 .bottom-pill:hover { transform: translateX(-50%) translateY(-2px); }
+
+/* Full-screen CommuteIQ Analysis Page (?view=commute) */
+.dock-full-btn { padding: 3px 10px; font-size: 11px; text-decoration: none !important; }
+body.commute-fullpage { overflow-y: auto; background: var(--bg); color: var(--text); }
+.fp-wrap { max-width: 1120px; margin: 0 auto; padding: 28px 24px 60px; display: flex; flex-direction: column; gap: 20px; }
+.fp-loading, .fp-err { padding: 60px 20px; text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.fp-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.fp-header h1 { font-size: 24px; font-weight: 500; letter-spacing: -.02em; }
+.fp-loc { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.fp-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fp-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.fp-stat { padding: 16px; border-radius: 14px; background: var(--chip); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.fp-stat.hi { border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--chip)); }
+.fp-stat span { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.fp-stat b { font-size: 28px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.fp-stat.hi b { color: var(--accent); }
+.fp-stat small { font-size: 11.5px; color: var(--muted); }
+.fp-card { padding: 20px; border-radius: 16px; background: var(--glass-strong); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 16px; }
+.fp-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.fp-card-head h2 { font-size: 20px; font-weight: 500; margin-top: 2px; }
+.fp-leg-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.fp-leg-kpis > div { padding: 12px 14px; border-radius: 12px; background: var(--chip); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.fp-leg-kpis span { font-size: 11px; color: var(--muted); }
+.fp-leg-kpis b { font-size: 22px; font-weight: 600; color: var(--accent); }
+.fp-leg-kpis small { font-size: 11px; color: var(--muted); }
+.fp-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.fp-charts > div { display: flex; flex-direction: column; gap: 6px; }
+.fp-bottom-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; align-items: start; }
+.fp-bottom-grid > div { display: flex; flex-direction: column; gap: 6px; }
+.fp-week small { font-size: 9px; color: var(--muted); }
+.fp-alts { display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 820px) {
+  .fp-summary, .fp-leg-kpis, .fp-charts, .fp-bottom-grid { grid-template-columns: 1fr; }
+}

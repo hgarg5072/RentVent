@@ -364,6 +364,34 @@ export async function geocodeOffice(query, center = { lat: 12.9716, lng: 77.5946
   return merged.slice(0, 6);
 }
 
+/**
+ * TomTom's historic traffic profile in Bengaluru is ~1.5x-1.7x optimistic during peak hours
+ * (e.g. modelling 24 km/h on ORR at 9 AM when real speeds are 12-15 km/h).
+ * Calibrates peak-hour travel time for Bengaluru coordinates while preserving rawTomTomMinutes.
+ */
+export function calibrateBengaluruSeconds(freeFlowSec, expectedSec, distKm, departAtISO, lat, lng) {
+  const inBlr = lat > 12.65 && lat < 13.35 && lng > 77.25 && lng < 77.95;
+  if (!inBlr) return { expectedSec, calibrated: false, factor: 1.0 };
+  const m = String(departAtISO || '').match(/T(\d{2}):/);
+  const hr = m ? parseInt(m[1], 10) : 9;
+
+  // Time-of-day Bengaluru congestion calibration factor
+  let factor = 1.12;
+  if (hr >= 8 && hr <= 10) factor = 1.62;       // Morning peak (ORR / Silk Board / Whitefield)
+  else if (hr >= 17 && hr <= 20) factor = 1.72; // Evening peak (typically worse in Bengaluru)
+  else if (hr === 7 || hr === 11 || hr === 16) factor = 1.32; // Shoulder hours
+
+  // Floor peak urban speed at realistic Bengaluru corridor ceiling (~14.5 km/h AM, ~13.5 km/h PM)
+  const scaled = Math.round(expectedSec * factor);
+  const speedFloorSec = (hr >= 8 && hr <= 10)
+    ? Math.round((distKm / 14.5) * 3600)
+    : (hr >= 17 && hr <= 20)
+      ? Math.round((distKm / 13.5) * 3600)
+      : 0;
+  const finalSec = Math.max(freeFlowSec, Math.max(scaled, Math.min(speedFloorSec, Math.round(expectedSec * 2.1))));
+  return { expectedSec: finalSec, calibrated: true, factor };
+}
+
 export async function fetchTomTomRoute(origin, dest, departAtISO) {
   const loc = `${origin.lat},${origin.lng}:${dest.lat},${dest.lng}`;
   const qs = new URLSearchParams({
@@ -378,8 +406,9 @@ export async function fetchTomTomRoute(origin, dest, departAtISO) {
   const routes = data.routes.map((r, idx) => {
     const s = r.summary || {};
     const distKm = Number(((s.lengthInMeters || 0) / 1000).toFixed(1));
-    const expectedSec = s.historicTrafficTravelTimeInSeconds || s.travelTimeInSeconds || 900;
-    const freeFlowSec = s.noTrafficTravelTimeInSeconds || Math.round(expectedSec * 0.58);
+    const rawExpectedSec = s.historicTrafficTravelTimeInSeconds || s.travelTimeInSeconds || 900;
+    const freeFlowSec = s.noTrafficTravelTimeInSeconds || Math.round(rawExpectedSec * 0.58);
+    const { expectedSec, calibrated } = calibrateBengaluruSeconds(freeFlowSec, rawExpectedSec, distKm, departAtISO, origin.lat, origin.lng);
     const pcts = calculatePercentiles(freeFlowSec, expectedSec);
     const pts = (r.legs?.[0]?.points || []).map((p) => [p.longitude, p.latitude]); // GeoJSON [lng, lat]
     return {
@@ -388,6 +417,8 @@ export async function fetchTomTomRoute(origin, dest, departAtISO) {
       distKm,
       freeFlowSec,
       expectedSec,
+      rawTomTomMinutes: Math.max(1, Math.round(rawExpectedSec / 60)),
+      calibrated,
       ...pcts,
       coordinates: pts,
     };
@@ -477,7 +508,7 @@ export async function analyzeSocietyCommute(society, { office1, office2, amTime 
   const offices = [office1, office2].filter(Boolean);
   if (!offices.length) return null;
 
-  const cacheKey = `rv_c_${society.id}_${offices.map((o) => `${o.lat.toFixed(4)},${o.lng.toFixed(4)}`).join('|')}_${amTime}_${pmTime}`;
+  const cacheKey = `rv_c2_${society.id}_${offices.map((o) => `${o.lat.toFixed(4)},${o.lng.toFixed(4)}`).join('|')}_${amTime}_${pmTime}`;
   if (memCache.has(cacheKey)) return memCache.get(cacheKey);
   try {
     const cached = sessionStorage.getItem(cacheKey);

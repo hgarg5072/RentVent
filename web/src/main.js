@@ -6,6 +6,7 @@ import { createFeed } from './feed.js';
 import { AMENITY_KEYS, DEFAULT_CRITERIA, NEAR, RANK, feetLabel, formatINR, matchSociety, matchUnit, priceFor, roomPasses } from './filters.js';
 import { BLR_HUBS, analyzeSocietyCommute, buildRoutesGeoJSON, geocodeOffice, getCustomTomTomKey, haversineKm, localitiesInRadius, matchLocalPlaces, officeScoreKm, setCustomTomTomKey } from './commute.js';
 import { renderCommutePanel } from './commuteUi.js';
+import { renderFullCommutePage } from './commutePage.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -43,6 +44,10 @@ let pickingPin = false;
 let pinRadiusKm = 5;
 
 async function boot() {
+  if (params.get('view') === 'commute') {
+    await renderFullCommutePage(params);
+    return;
+  }
   const cities = await fetch('/data/cities.json').then((r) => r.json()).catch(() => ({ bangalore: { name: 'Bengaluru' } }));
   const defaultCity = cities.bangalore ? 'bangalore' : Object.keys(cities)[0] || 'gurgaon';
   cityId = cities[params.get('city')] ? params.get('city') : defaultCity;
@@ -521,6 +526,24 @@ function renderCard(s) {
   if (!details) loadDetails().then(() => { if (selected === s.id) renderCard(s); });
 }
 
+function fullCommuteUrl(s) {
+  const q = new URLSearchParams({
+    view: 'commute',
+    city: cityId,
+    open: s.id,
+    sname: s.name,
+    sloc: s.locality || '',
+    slat: String(s.lat),
+    slng: String(s.lng),
+    am: commuteCfg.amTime || '08:30',
+    pm: commuteCfg.pmTime || '17:30',
+    pct: String(commuteCfg.percentile || 80),
+  });
+  if (commuteCfg.office1) q.set('o1', `${commuteCfg.office1.lat},${commuteCfg.office1.lng},${encodeURIComponent(commuteCfg.office1.name)}`);
+  if (commuteCfg.office2) q.set('o2', `${commuteCfg.office2.lat},${commuteCfg.office2.lng},${encodeURIComponent(commuteCfg.office2.name)}`);
+  return `/?${q.toString()}`;
+}
+
 function paintCommuteCard(s) {
   const dock = $('commute-dock');
   if (!dock) return;
@@ -532,9 +555,13 @@ function paintCommuteCard(s) {
   }
   dock.hidden = false;
   const state = lastCommute.sid === s.id ? lastCommute : { loading: false, error: null, analysis: null };
+  const fullUrl = fullCommuteUrl(s);
   dock.innerHTML = `<div class="dock-bar">
       <span class="k">CommuteIQ · Traffic &amp; Reliability — <b>${esc(s.name)}</b></span>
-      <button class="iconbtn" id="dock-min" title="Minimize traffic dock">⌄</button>
+      <span class="row-gap">
+        <a class="preset dock-full-btn" href="${esc(fullUrl)}" target="_blank" rel="noopener" title="Open full-screen traffic analysis in a new tab">⛶ Full screen ↗</a>
+        <button class="iconbtn" id="dock-min" title="Minimize traffic dock">⌄</button>
+      </span>
     </div>
     <div id="ciq-panel" class="ciq-panel dock-body"></div>`;
   $('dock-min').onclick = () => {

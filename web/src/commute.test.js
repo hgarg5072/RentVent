@@ -94,3 +94,14 @@ describe('on-demand radius locality lookup', () => {
     expect(slugs).not.toContain('yelahanka');
   });
 });
+
+import { calibrateBengaluruSeconds } from './commute.js';
+
+describe('Bengaluru peak-hour calibration', () => {
+  it('scales optimistic TomTom 9 AM ORR time (~25m for 10km) to realistic ~40m', () => {
+    const res = calibrateBengaluruSeconds(975, 1484, 10.0, '2026-12-02T09:00:00+05:30', 12.92, 77.67);
+    expect(res.calibrated).toBe(true);
+    expect(res.expectedSec / 60).toBeGreaterThanOrEqual(38);
+    expect(res.expectedSec / 60).toBeLessThanOrEqual(48);
+  });
+});
