@@ -211,10 +211,18 @@ function buildFilters() {
   };
   sizeSlider = dualRange($('f-size'), { min: 0, max: 8000, step: 50, fmt: (v, end) => (end === 'hi' && v >= 8000 ? 'Any' : `${v.toLocaleString()} sq ft · ${Math.round(v / 9)} gaj`),
     onChange: (a, b) => { crit.minSqft = a; crit.maxSqft = b >= 8000 ? null : b; labels(); applyFilters(); } });
-  priceSlider = dualRange($('f-price'), { min: 0, max: 20, step: 0.25, fmt: (v) => v, onChange: (a, b) => {
-    const top = priceSlider.cfg.max, unit = crit.mode === 'rent' ? 1000 : 1e7;
-    if (crit.mode === 'rent') { crit.minRent = a > 0 ? a * unit : null; crit.maxRent = b >= top ? null : b * unit; }
-    else { crit.minPrice = a > 0 ? a * unit : null; crit.maxPrice = b >= top ? null : b * unit; }
+  // Non-linear rent scale: 0-1L gets 56% of slider (2.5k steps), 1L-2L gets 28% (5k steps), 2L-5L gets 16% (25k steps)
+  const rentFromTick = (t) => (t <= 40 ? t * 2500 : t <= 60 ? 100000 + (t - 40) * 5000 : 200000 + (t - 60) * 25000);
+  const tickFromRent = (r) => {
+    if (!r || r <= 0) return 0;
+    if (r <= 100000) return Math.round(r / 2500);
+    if (r <= 200000) return 40 + Math.round((r - 100000) / 5000);
+    return Math.min(72, 60 + Math.round((r - 200000) / 25000));
+  };
+  priceSlider = dualRange($('f-price'), { min: 0, max: 72, step: 1, fmt: (v) => v, onChange: (a, b) => {
+    const top = priceSlider.cfg.max;
+    if (crit.mode === 'rent') { crit.minRent = a > 0 ? rentFromTick(a) : null; crit.maxRent = b >= top ? null : rentFromTick(b); }
+    else { crit.minPrice = a > 0 ? a * 1e7 : null; crit.maxPrice = b >= top ? null : b * 1e7; }
     labels(); applyFilters();
   } });
   redrawFilters = () => {
@@ -237,9 +245,9 @@ function buildFilters() {
     if (crit.roomArea) $('f-area-range').value = crit.roomArea / 9;
     sizeSlider.set(crit.minSqft || 0, crit.maxSqft ?? 8000);
     const rent = crit.mode === 'rent';
-    priceSlider.reconfig(rent ? { min: 0, max: 500, step: 5, fmt: (v, end) => (end === 'hi' && v >= 500 ? 'Any' : v ? `${formatINR(v * 1000)}/mo` : '₹0') }
+    priceSlider.reconfig(rent ? { min: 0, max: 72, step: 1, fmt: (t, end) => (end === 'hi' && t >= 72 ? 'Any' : t ? `${formatINR(rentFromTick(t))}/mo` : '₹0') }
       : { min: 0, max: 20, step: 0.25, fmt: (v, end) => (end === 'hi' && v >= 20 ? 'Any' : v ? formatINR(v * 1e7) : '₹0') });
-    priceSlider.set(rent ? (crit.minRent || 0) / 1000 : (crit.minPrice || 0) / 1e7, rent ? (crit.maxRent ? crit.maxRent / 1000 : 500) : (crit.maxPrice ? crit.maxPrice / 1e7 : 20));
+    priceSlider.set(rent ? tickFromRent(crit.minRent) : (crit.minPrice || 0) / 1e7, rent ? (crit.maxRent ? tickFromRent(crit.maxRent) : 72) : (crit.maxPrice ? crit.maxPrice / 1e7 : 20));
     $('f-ready').checked = crit.ready;
     $('f-only').checked = !!crit.only;
     if (!$('amen-more').hidden) amenList();
