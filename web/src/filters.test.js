@@ -138,3 +138,14 @@ describe('flagged prices', () => {
     expect(priceFor(s, 'rent', [3])).toMatchObject({ value: 90100, estimated: true });
   });
 });
+
+describe('map pin radius filter', () => {
+  it('matches societies inside the pin radius and rejects those outside', () => {
+    const pin = { lat: 12.9716, lng: 77.5946, km: 5 };
+    const nearSoc = soc({ lat: 12.985, lng: 77.605 }); // ~1.9 km away
+    const farSoc = soc({ lat: 12.845, lng: 77.660 });  // ~15.8 km away
+    expect(matchSociety(nearSoc, crit({ pin }))).toBe('match');
+    expect(matchSociety(farSoc, crit({ pin }))).toBe('no');
+    expect(matchSociety(farSoc, crit({ pin: { ...pin, km: 20 } }))).toBe('match');
+  });
+});

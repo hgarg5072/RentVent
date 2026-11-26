@@ -20,6 +20,7 @@ export const DEFAULT_CRITERIA = {
   maxRent: null,    // rupees per month, renting
   amenities: [],    // amenity keys, see AMENITY_KEYS
   ready: false,     // only ready to move
+  pin: null,        // { lat, lng, km } map pin radius filter or null
 };
 
 // Amenity keys -> words that identify them in portal amenity names.
@@ -116,8 +117,18 @@ export function matchUnit(u, c) {
 
 const norm = (t) => (t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+export function distKm(a, b) {
+  if (!a || !b || a.lat == null || b.lat == null) return Infinity;
+  const r = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * r;
+  const dLng = (b.lng - a.lng) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+
 export function matchSociety(s, c) {
   if (c.only && !c.only.includes(s.id)) return 'no';
+  if (c.pin && distKm(s, c.pin) > c.pin.km) return 'no';
   if (c.q) {
     const hay = `${norm(s.name)} ${norm(s.developer)} ${norm(s.locality)}`;
     if (!norm(c.q).split(' ').every((w) => hay.includes(w))) return 'no';

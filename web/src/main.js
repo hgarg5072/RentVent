@@ -1,6 +1,6 @@
 import './style.css';
 import maplibregl from 'maplibre-gl';
-import { addBaseLayers, addCommuteLayers, addSocietyLayers, BASE_MODES, createMap, OVERVIEW, setBaseMode, setCommuteRoutes, setHighlights, setOfficePins, setSelected, setStates, startPulse } from './map.js';
+import { addBaseLayers, addCommuteLayers, addSocietyLayers, BASE_MODES, createMap, OVERVIEW, setBaseMode, setCommuteRoutes, setHighlights, setOfficePins, setSearchPin, setSelected, setStates, startPulse } from './map.js';
 import { searchSocieties } from './search.js';
 import { createFeed } from './feed.js';
 import { AMENITY_KEYS, DEFAULT_CRITERIA, NEAR, RANK, feetLabel, formatINR, matchSociety, matchUnit, priceFor, roomPasses } from './filters.js';
@@ -36,6 +36,8 @@ let myList = [], allAmenities = [];
 const highlights = { glow: true, bounds: true, labels: true, ...store.get('ff-highlights', {}) };
 const commuteCfg = { office1: null, office2: null, amTime: '08:30', pmTime: '17:30', percentile: 80, bias: 50, ...store.get('rv-commute', {}) };
 let lastCommute = { sid: null, loading: false, error: null, analysis: null };
+let pickingPin = false;
+let pinRadiusKm = 5;
 
 async function boot() {
   const cities = await fetch('/data/cities.json').then((r) => r.json()).catch(() => ({ bangalore: { name: 'Bengaluru' } }));
@@ -67,6 +69,7 @@ async function boot() {
 
   feed = createFeed($('feed'), $('log-mode'), { events: city.events, byId });
   buildFilters();
+  buildPin();
   buildCommute();
   buildSearch();
   buildList();
@@ -96,10 +99,18 @@ async function boot() {
     // any hand on the map stops a running tour
     for (const ev of ['dragstart', 'wheel', 'touchstart']) map.on(ev, (e) => { if (e.originalEvent) stopTour(); });
     for (const l of ['bld', 'site-fill', 'glow']) {
-      map.on('click', l, (e) => { stopTour(); openSociety(e.features[0].properties.sid); });
-      map.on('mouseenter', l, () => (map.getCanvas().style.cursor = 'pointer'));
-      map.on('mouseleave', l, () => (map.getCanvas().style.cursor = ''));
+      map.on('click', l, (e) => { if (pickingPin) return; stopTour(); openSociety(e.features[0].properties.sid); });
+      map.on('mouseenter', l, () => { if (!pickingPin) map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', l, () => { if (!pickingPin) map.getCanvas().style.cursor = ''; });
     }
+    map.on('click', (e) => {
+      if (!pickingPin) return;
+      dropSearchPin(e.lngLat.lat, e.lngLat.lng);
+    });
+    map.on('contextmenu', (e) => {
+      e.preventDefault();
+      dropSearchPin(e.lngLat.lat, e.lngLat.lng);
+    });
     intro();
   });
 }
@@ -285,7 +296,10 @@ function sorted(list) {
   const price = (s) => priceFor(s, crit.mode, crit.bhk)?.value ?? Infinity;
   const by = {
     best: (a, b) => RANK[states.get(b.id)] - RANK[states.get(a.id)] || b.verified - a.verified || (b.score || 0) - (a.score || 0),
-    commute: (a, b) => officeScoreKm(a, commuteCfg.office1, commuteCfg.office2, commuteCfg.bias) - officeScoreKm(b, commuteCfg.office1, commuteCfg.office2, commuteCfg.bias),
+    commute: (a, b) => {
+      const dist = (s) => (crit.pin && !commuteCfg.office1 ? haversineKm(s, crit.pin) : officeScoreKm(s, commuteCfg.office1 || crit.pin, commuteCfg.office2, commuteCfg.bias));
+      return dist(a) - dist(b);
+    },
     score: (a, b) => (b.score || 0) - (a.score || 0),
     rating: (a, b) => (b.rating || 0) - (a.rating || 0) || (b.rating_count || 0) - (a.rating_count || 0),
     price: (a, b) => price(a) - price(b),
@@ -333,9 +347,11 @@ function resultItem(s) {
   const p = priceFor(s, crit.mode, crit.bhk);
   const money = p ? `${p.estimated ? '~' : ''}${formatINR(p.value)}${crit.mode === 'rent' ? '/mo' : ''}` : '';
   const how = s.verified ? ' · checked by hand' : s.ai_read ? ' · AI-read plans' : '';
-  const offDist = commuteCfg.office1
-    ? ` · ${haversineKm(s, commuteCfg.office1).toFixed(1)} km${commuteCfg.office2 ? ` / ${haversineKm(s, commuteCfg.office2).toFixed(1)} km` : ''}`
-    : '';
+  const offDist = crit.pin
+    ? ` · ${haversineKm(s, crit.pin).toFixed(1)} km from pin`
+    : commuteCfg.office1
+      ? ` · ${haversineKm(s, commuteCfg.office1).toFixed(1)} km${commuteCfg.office2 ? ` / ${haversineKm(s, commuteCfg.office2).toFixed(1)} km` : ''}`
+      : '';
   li.innerHTML = `<span class="nm">${myList.includes(s.id) ? '★ ' : ''}${esc(s.name)}<small>${esc(s.locality || '')}${how}${offDist}</small></span>
     <span class="tag ${st}">${money}${s.score != null ? `<small>score ${s.score}</small>` : ''}</span>`;
   li.onclick = () => { stopTour(); openSociety(s.id); };
@@ -500,6 +516,78 @@ async function refreshCommuteCard(s) {
     paintCommuteCard(s);
     if (map) setCommuteRoutes(map, null);
   }
+}
+
+function setPinPicking(on) {
+  pickingPin = on;
+  document.body.classList.toggle('picking-pin', on);
+  if (map) map.getCanvas().style.cursor = on ? 'crosshair' : '';
+  $('btn-pick-pin').textContent = on ? 'Click anywhere on map… (Esc)' : crit.pin ? '📍 Move pin on map' : '📍 Pick point on map';
+  $('btn-pin').classList.toggle('on', on || !!crit.pin);
+}
+
+function dropSearchPin(lat, lng) {
+  crit.pin = { lat: Number(lat.toFixed(5)), lng: Number(lng.toFixed(5)), km: pinRadiusKm };
+  setPinPicking(false);
+  if (map) {
+    setSearchPin(map, crit.pin);
+    map.flyTo({ center: [crit.pin.lng, crit.pin.lat], zoom: Math.max(map.getZoom(), pinRadiusKm <= 5 ? 12.2 : 11.4), duration: 900, essential: true });
+  }
+  renderPinControls();
+  applyFilters(true);
+}
+
+function renderPinControls() {
+  const p = crit.pin;
+  $('v-pin').textContent = p ? `${p.km} km` : 'Off';
+  $('btn-pin-clear').hidden = !p;
+  $('pin-controls').hidden = !p;
+  $('pin-hint').hidden = !!p;
+  $('btn-pin').classList.toggle('on', pickingPin || !!p);
+  if (!pickingPin) $('btn-pick-pin').textContent = p ? '📍 Move pin on map' : '📍 Pick point on map';
+  if (p) {
+    $('pin-coords').textContent = `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`;
+    $('f-pin-km').value = p.km;
+    document.querySelectorAll('#pin-chips button').forEach((b) => b.classList.toggle('on', +b.dataset.km === p.km));
+  }
+}
+
+function buildPin() {
+  const togglePick = () => setPinPicking(!pickingPin);
+  $('btn-pick-pin').onclick = togglePick;
+  $('btn-pin').onclick = () => {
+    togglePick();
+    if (mobile && pickingPin) document.body.classList.add('m-collapsed');
+  };
+  $('btn-pin-clear').onclick = () => {
+    crit.pin = null;
+    setPinPicking(false);
+    if (map) setSearchPin(map, null);
+    renderPinControls();
+    applyFilters();
+  };
+  const setKm = (km) => {
+    pinRadiusKm = km;
+    if (crit.pin) {
+      crit.pin = { ...crit.pin, km };
+      if (map) setSearchPin(map, crit.pin);
+      renderPinControls();
+      applyFilters();
+    }
+  };
+  document.querySelectorAll('#pin-chips button').forEach((b) => { b.onclick = () => setKm(+b.dataset.km); });
+  $('f-pin-km').oninput = () => setKm(+$('f-pin-km').value);
+  $('btn-pin-as-off').onclick = () => {
+    if (!crit.pin) return;
+    commuteCfg.office1 = { name: `Pinned (${crit.pin.lat.toFixed(3)}, ${crit.pin.lng.toFixed(3)})`, short: 'Pinned spot', lat: crit.pin.lat, lng: crit.pin.lng };
+    store.set('rv-commute', commuteCfg);
+    if (map) setOfficePins(map, commuteCfg.office1, commuteCfg.office2);
+    buildCommute();
+    renderResults();
+    if (selected && byId.get(selected)) refreshCommuteCard(byId.get(selected));
+  };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pickingPin) setPinPicking(false); });
+  renderPinControls();
 }
 
 function buildCommute() {

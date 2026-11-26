@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="rv-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#14161d"/>
+      <stop offset="100%" stop-color="#07080b"/>
+    </linearGradient>
+    <linearGradient id="rv-pin" x1="16" y1="10" x2="48" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffe6bc"/>
+      <stop offset="100%" stop-color="#f5b35d"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#rv-bg)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="14.5" stroke="rgba(255,217,160,0.22)" stroke-width="1.5"/>
+  <!-- Commute pulse arc -->
+  <path d="M13 46C18 52 25 55 32 55C39 55 46 52 51 46" stroke="#38bdf8" stroke-width="2.6" stroke-linecap="round" opacity="0.85"/>
+  <!-- Location pin silhouette -->
+  <path d="M32 10C21.5 10 13 18.2 13 28.4C13 38.8 25.8 48.2 30.7 51.5C31.5 52 32.5 52 33.3 51.5C38.2 48.2 51 38.8 51 28.4C51 18.2 42.5 10 32 10Z" fill="url(#rv-pin)"/>
+  <!-- Architectural home cutout inside pin -->
+  <path d="M22.5 29.2L32 21.2L41.5 29.2V37.8C41.5 38.6 40.8 39.2 40 39.2H35.2V33.2H28.8V39.2H24C23.2 39.2 22.5 38.6 22.5 37.8V29.2Z" fill="#0b0c10"/>
+  <!-- Glowing window accent -->
+  <circle cx="32" cy="27.8" r="2.2" fill="#38bdf8"/>
+</svg>

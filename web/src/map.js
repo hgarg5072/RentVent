@@ -196,8 +196,32 @@ export function setHighlights(map, { glow = true, bounds = true, labels = true }
 const EMPTY_FC = { type: 'FeatureCollection', features: [] };
 
 export function addCommuteLayers(map) {
+  map.addSource('search-radius', { type: 'geojson', data: EMPTY_FC });
+  map.addSource('search-pin', { type: 'geojson', data: EMPTY_FC });
   map.addSource('commute-routes', { type: 'geojson', data: EMPTY_FC });
   map.addSource('office-pins', { type: 'geojson', data: EMPTY_FC });
+
+  map.addLayer({
+    id: 'search-radius-fill', type: 'fill', source: 'search-radius',
+    paint: { 'fill-color': '#ffd9a0', 'fill-opacity': 0.08 },
+  });
+  map.addLayer({
+    id: 'search-radius-line', type: 'line', source: 'search-radius',
+    paint: { 'line-color': '#ffd9a0', 'line-width': 2, 'line-opacity': 0.85, 'line-dasharray': [3, 2] },
+  });
+  map.addLayer({
+    id: 'search-pin-ring', type: 'circle', source: 'search-pin',
+    paint: { 'circle-color': '#ffd9a0', 'circle-radius': 15, 'circle-opacity': 0.25, 'circle-blur': 0.6 },
+  });
+  map.addLayer({
+    id: 'search-pin-dot', type: 'circle', source: 'search-pin',
+    paint: { 'circle-color': '#ffd9a0', 'circle-radius': 6.5, 'circle-stroke-color': '#0b0c10', 'circle-stroke-width': 2 },
+  });
+  map.addLayer({
+    id: 'search-pin-lbl', type: 'symbol', source: 'search-pin',
+    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 11.5, 'text-offset': [0, 1.5], 'text-anchor': 'top' },
+    paint: { 'text-color': '#ffd9a0', 'text-halo-color': 'rgba(0,0,0,.9)', 'text-halo-width': 1.5 },
+  });
 
   map.addLayer({
     id: 'commute-route-alt', type: 'line', source: 'commute-routes',
@@ -263,4 +287,38 @@ export function setCommuteRoutes(map, geojson) {
   const src = map?.getSource?.('commute-routes');
   if (!src) return;
   src.setData(geojson || EMPTY_FC);
+}
+
+function circleRing(lng, lat, km, steps = 64) {
+  const R = 6371;
+  const latR = (lat * Math.PI) / 180;
+  const lngR = (lng * Math.PI) / 180;
+  const d = km / R;
+  const coords = [];
+  for (let i = 0; i <= steps; i++) {
+    const b = (i / steps) * 2 * Math.PI;
+    const pLat = Math.asin(Math.sin(latR) * Math.cos(d) + Math.cos(latR) * Math.sin(d) * Math.cos(b));
+    const pLng = lngR + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(latR), Math.cos(d) - Math.sin(latR) * Math.sin(pLat));
+    coords.push([(pLng * 180) / Math.PI, (pLat * 180) / Math.PI]);
+  }
+  return coords;
+}
+
+export function setSearchPin(map, pin) {
+  const rSrc = map?.getSource?.('search-radius');
+  const pSrc = map?.getSource?.('search-pin');
+  if (!rSrc || !pSrc) return;
+  if (!pin) {
+    rSrc.setData(EMPTY_FC);
+    pSrc.setData(EMPTY_FC);
+    return;
+  }
+  rSrc.setData({
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [circleRing(pin.lng, pin.lat, pin.km)] } }],
+  });
+  pSrc.setData({
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: { label: `Pinned · ${pin.km} km` }, geometry: { type: 'Point', coordinates: [pin.lng, pin.lat] } }],
+  });
 }

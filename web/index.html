@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>RentVent · Bengaluru</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="description" content="Housing societies in Bengaluru on one interactive map. Filter by monthly rent, BHK, smallest bedroom size, amenities and nearby metro or parks.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -12,6 +13,7 @@
   <div id="map"></div>
 
   <div class="topbar">
+    <button id="btn-pin" title="Click anywhere on the map to filter within a radius">📍 Pin radius</button>
     <button id="btn-guide" title="How this works">Guide</button>
     <button id="btn-replay" title="Replay the intro">Replay</button>
     <button id="btn-tour" title="Fly through the matches">Tour</button>
@@ -24,7 +26,13 @@
   <div class="mtabs" id="mtabs"><button data-t="search" class="on">Search</button><button data-t="society" id="mt-society" disabled>Society</button><button class="collapse" id="m-collapse" aria-label="Collapse panel">⌄</button></div>
 
   <aside class="panel left" id="filters">
-    <div class="k">RentVent · <select id="city-pick" aria-label="City"></select></div>
+    <div class="brand">
+      <img class="brand-logo" src="/favicon.svg" alt="RentVent logo" width="28" height="28">
+      <div class="brand-text">
+        <div class="brand-name">RentVent</div>
+        <div class="k"><select id="city-pick" aria-label="City"></select></div>
+      </div>
+    </div>
     <h1 class="ttl">Find the flat that fits.</h1>
     <div class="search">
       <input id="q" type="search" placeholder="Search a society, developer or locality" autocomplete="off" aria-label="Search societies">
@@ -73,6 +81,27 @@
     <section>
       <div class="k">Nearby</div>
       <div class="chips" id="f-near"></div>
+    </section>
+    <section class="pin-box" id="pin-sec">
+      <div class="k row">Pin on map · Radius <span class="val" id="v-pin">Off</span></div>
+      <div class="row-between">
+        <button class="preset" id="btn-pick-pin">📍 Pick point on map</button>
+        <button class="linkbtn" id="btn-pin-clear" hidden>Clear</button>
+      </div>
+      <div class="hint" id="pin-hint">Click the button (or right-click anywhere on the map) to drop a pin and show societies within 5 km, 10 km, or any distance.</div>
+      <div id="pin-controls" hidden>
+        <div class="chips" id="pin-chips">
+          <button class="chip" data-km="2">2 km</button>
+          <button class="chip on" data-km="5">5 km</button>
+          <button class="chip" data-km="10">10 km</button>
+          <button class="chip" data-km="15">15 km</button>
+        </div>
+        <input type="range" id="f-pin-km" min="1" max="25" step="0.5" value="5" aria-label="Search radius in km">
+        <div class="row-between">
+          <span class="fine" id="pin-coords"></span>
+          <button class="linkbtn" id="btn-pin-as-off">Use as Office 1 →</button>
+        </div>
+      </div>
     </section>
     <section class="commute-box" id="commute-sec">
       <div class="k row">CommuteIQ · Offices <button class="linkbtn" id="btn-tt-key" title="Optional custom TomTom API key">API key</button></div>
@@ -128,7 +157,7 @@
       <div class="sub" id="count-sub"></div>
     </div>
     <div class="k row">Results <select id="f-sort" aria-label="Sort results">
-      <option value="best">Best match</option><option value="commute">Closest to office(s)</option><option value="score">Flat Finder score</option><option value="rating">Resident rating</option>
+      <option value="best">Best match</option><option value="commute">Closest to pin / office</option><option value="score">Flat Finder score</option><option value="rating">Resident rating</option>
       <option value="price">Price, low to high</option><option value="listings">Most listings</option></select></div>
     <div id="results"></div>
 
