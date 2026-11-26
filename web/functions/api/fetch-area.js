@@ -31,31 +31,43 @@ export async function onRequest({ request, env }) {
   const u = new URL(request.url);
   const slug = (u.searchParams.get('slug') || '').toLowerCase().trim();
   const city = (u.searchParams.get('city') || 'bangalore').toLowerCase().trim();
+  const refresh = u.searchParams.get('refresh') === '1';
   if (!slug || !SLUG_RE.test(slug) || !SLUG_RE.test(city)) {
     return new Response(JSON.stringify({ error: 'Invalid slug or city' }), { status: 400, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
   }
 
-  // 1. Serve pre-fetched on-demand area shard from Cloudflare Pages assets (instant, zero WAF blocks)
-  try {
-    const assetRes = await env.ASSETS.fetch(new Request(`${u.origin}/data/areas/${city}/${slug}.json`));
-    if (assetRes.ok) {
-      const body = await assetRes.text();
-      return new Response(body, {
-        status: 200,
-        headers: {
-          'content-type': 'application/json',
-          'access-control-allow-origin': '*',
-          'cache-control': 'public, max-age=1800',
-        },
-      });
-    }
-  } catch { /* fall through to live fetch */ }
+  const serveSnapshot = async () => {
+    try {
+      const assetRes = await env.ASSETS.fetch(new Request(`${u.origin}/data/areas/${city}/${slug}.json`));
+      if (assetRes.ok) {
+        const data = await assetRes.json();
+        return new Response(JSON.stringify({ ...data, source: 'snapshot' }), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+            'access-control-allow-origin': '*',
+            'cache-control': refresh ? 'no-store' : 'public, max-age=1800',
+          },
+        });
+      }
+    } catch { /* ignore */ }
+    return null;
+  };
 
+  // Normal load: serve pre-fetched area shard instantly (zero WAF blocks)
+  if (!refresh) {
+    const snap = await serveSnapshot();
+    if (snap) return snap;
+  }
+
+  // On explicit refresh=1 (or missing shard): try live fetch first, fall back to snapshot if portal blocks edge IP
   const target = `https://www.magicbricks.com/flats-for-rent-in-${slug}-${city}-pppfr`;
   try {
     const res = await fetch(target, { headers: { 'User-Agent': UA, Accept: 'text/html' } });
     if (!res.ok) {
-      return new Response(JSON.stringify({ slug, societies: [], raw_count: 0, status: res.status }), {
+      const snap = await serveSnapshot();
+      if (snap) return snap;
+      return new Response(JSON.stringify({ slug, societies: [], raw_count: 0, status: res.status, source: 'blocked' }), {
         status: 200,
         headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
       });
@@ -65,6 +77,8 @@ export async function onRequest({ request, env }) {
     const jsonStart = marker >= 0 ? html.indexOf('{', marker) : -1;
     const scriptEnd = jsonStart >= 0 ? html.indexOf('</script>', jsonStart) : -1;
     if (jsonStart < 0 || scriptEnd < 0) {
+      const snap = await serveSnapshot();
+      if (snap) return snap;
       return new Response(JSON.stringify({ slug, societies: [], raw_count: 0, html_len: html.length }), {
         status: 200,
         headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
@@ -131,7 +145,7 @@ export async function onRequest({ request, env }) {
       return { ...rest, rent_count: totalRent, sale_count: 0, prices, unit_types, nearby: {}, score: null, shape: 'live' };
     });
 
-    return new Response(JSON.stringify({ slug, societies, raw_count: list.length }), {
+    return new Response(JSON.stringify({ slug, societies, raw_count: list.length, source: 'live', fetched: new Date().toISOString().slice(0, 10) }), {
       status: 200,
       headers: {
         'content-type': 'application/json',

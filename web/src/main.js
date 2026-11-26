@@ -584,26 +584,32 @@ function mergeLiveSocieties(incoming) {
   return { added, updated };
 }
 
-async function fetchListingsInRadius(pin) {
+async function fetchListingsInRadius(pin, { force = false } = {}) {
   if (!pin || cityId !== 'bangalore') return;
   const gen = ++radiusFetchGen;
-  const targets = localitiesInRadius(pin.lat, pin.lng, pin.km, 8).filter((l) => !fetchedSlugs.has(l.slug));
+  const allNearby = localitiesInRadius(pin.lat, pin.lng, pin.km, 8);
+  const targets = force ? allNearby : allNearby.filter((l) => !fetchedSlugs.has(l.slug));
   const statusEl = $('pin-fetch-status');
+  const refBtn = $('btn-pin-refresh');
   if (!targets.length) {
-    if (statusEl) { statusEl.hidden = false; statusEl.textContent = `✓ All nearby areas within ${pin.km} km already loaded`; }
+    if (statusEl) { statusEl.hidden = false; statusEl.textContent = `✓ All nearby areas within ${pin.km} km loaded`; }
     return;
   }
-  if (statusEl) { statusEl.hidden = false; statusEl.textContent = `🔄 Fetching live rentals in ${targets[0].name}…`; }
-  let totalAdded = 0, totalUpdated = 0;
+  if (refBtn) refBtn.disabled = true;
+  if (statusEl) { statusEl.hidden = false; statusEl.textContent = `🔄 ${force ? 'Refreshing' : 'Fetching'} ${targets[0].name}…`; }
+  let totalAdded = 0, totalUpdated = 0, liveCount = 0, latestDate = '';
   for (let i = 0; i < targets.length; i++) {
     if (gen !== radiusFetchGen || !crit.pin) return;
     const loc = targets[i];
-    if (statusEl) statusEl.textContent = `🔄 Fetching ${loc.name} (${i + 1}/${targets.length})…${totalAdded ? ` +${totalAdded} added` : ''}`;
+    if (statusEl) statusEl.textContent = `🔄 ${force ? 'Refreshing' : 'Fetching'} ${loc.name} (${i + 1}/${targets.length})…${totalAdded ? ` +${totalAdded} added` : ''}`;
     try {
-      const res = await fetch(`/api/fetch-area?slug=${encodeURIComponent(loc.slug)}&city=${encodeURIComponent(cityId)}`);
+      const qs = `slug=${encodeURIComponent(loc.slug)}&city=${encodeURIComponent(cityId)}${force ? `&refresh=1&t=${Date.now()}` : ''}`;
+      const res = await fetch(`/api/fetch-area?${qs}`);
       if (!res.ok) continue;
       const body = await res.json();
       fetchedSlugs.add(loc.slug);
+      if (body.source === 'live') liveCount++;
+      if (body.fetched) latestDate = body.fetched;
       if (gen !== radiusFetchGen || !crit.pin) return;
       const { added, updated } = mergeLiveSocieties(body.societies || []);
       totalAdded += added;
@@ -611,10 +617,12 @@ async function fetchListingsInRadius(pin) {
       if (added || updated) applyFilters();
     } catch { /* keep going for remaining localities */ }
   }
+  if (refBtn) refBtn.disabled = false;
   if (gen === radiusFetchGen && statusEl) {
+    const tag = liveCount ? 'live' : latestDate ? `snapshot ${latestDate}` : 'cached';
     statusEl.textContent = totalAdded || totalUpdated
-      ? `✓ Background fetch done: +${totalAdded} new societies${totalUpdated ? `, ${totalUpdated} updated` : ''} near pin`
-      : `✓ Nearby areas checked (no extra listings found)`;
+      ? `✓ Refreshed (${tag}): +${totalAdded} new${totalUpdated ? `, ${totalUpdated} updated` : ''} in ${pin.km} km`
+      : `✓ Up to date (${tag}) across ${targets.length} nearby areas`;
   }
 }
 
@@ -622,6 +630,7 @@ function renderPinControls() {
   const p = crit.pin;
   $('v-pin').textContent = p ? `${p.km} km` : 'Off';
   $('btn-pin-clear').hidden = !p;
+  $('btn-pin-refresh').hidden = !p || cityId !== 'bangalore';
   $('pin-controls').hidden = !p;
   $('pin-hint').hidden = !!p;
   $('btn-pin').classList.toggle('on', pickingPin || !!p);
@@ -639,6 +648,9 @@ function buildPin() {
   $('btn-pin').onclick = () => {
     togglePick();
     if (mobile && pickingPin) document.body.classList.add('m-collapsed');
+  };
+  $('btn-pin-refresh').onclick = () => {
+    if (crit.pin) fetchListingsInRadius(crit.pin, { force: true });
   };
   $('btn-pin-clear').onclick = () => {
     crit.pin = null;

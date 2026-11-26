@@ -86,7 +86,10 @@
       <div class="k row">Pin on map · Radius <span class="val" id="v-pin">Off</span></div>
       <div class="row-between">
         <button class="preset" id="btn-pick-pin">📍 Pick point on map</button>
-        <button class="linkbtn" id="btn-pin-clear" hidden>Clear</button>
+        <span class="row-gap">
+          <button class="linkbtn" id="btn-pin-refresh" hidden title="Refresh live rental listings inside this radius">🔄 Refresh</button>
+          <button class="linkbtn" id="btn-pin-clear" hidden>Clear</button>
+        </span>
       </div>
       <div class="hint" id="pin-hint">Click the button (or right-click anywhere on the map) to drop a pin and show societies within 5 km, 10 km, or any distance.</div>
       <div id="pin-controls" hidden>
