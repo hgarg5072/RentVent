@@ -548,9 +548,11 @@ function paintCommuteCard(s) {
   const dock = $('commute-dock');
   if (!dock) return;
   const hasOffice = !!(commuteCfg.office1 || commuteCfg.office2);
+  if ($('mt-traffic')) $('mt-traffic').disabled = !selected || !hasOffice;
   if (!hasOffice) {
     dock.hidden = true;
     $('pill-commute').hidden = true;
+    if (document.body.classList.contains('m-traffic')) showMobile('society');
     return;
   }
   dock.hidden = false;
@@ -879,9 +881,11 @@ function sparkline(trend) {
 // ---------- phone: one bottom sheet, two tabs (search | society) ----------
 function showMobile(tab) {
   document.body.classList.toggle('m-society', tab === 'society');
+  document.body.classList.toggle('m-traffic', tab === 'traffic');
   document.body.classList.remove('m-collapsed');
   document.querySelectorAll('#mtabs [data-t]').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
   $('mt-society').disabled = !selected && tab !== 'society';
+  $('mt-traffic').disabled = !selected || !(commuteCfg.office1 || commuteCfg.office2);
 }
 
 function buildMobile() {
