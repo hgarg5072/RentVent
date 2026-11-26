@@ -1,10 +1,10 @@
 import './style.css';
 import maplibregl from 'maplibre-gl';
-import { addBaseLayers, addCommuteLayers, addSocietyLayers, BASE_MODES, createMap, OVERVIEW, setBaseMode, setCommuteRoutes, setHighlights, setOfficePins, setSearchPin, setSelected, setStates, startPulse } from './map.js';
+import { addBaseLayers, addCommuteLayers, addSocietyLayers, BASE_MODES, createMap, OVERVIEW, setBaseMode, setCommuteRoutes, setHighlights, setOfficePins, setSearchPin, setSelected, setStates, startPulse, updateSocietySources } from './map.js';
 import { searchSocieties } from './search.js';
 import { createFeed } from './feed.js';
 import { AMENITY_KEYS, DEFAULT_CRITERIA, NEAR, RANK, feetLabel, formatINR, matchSociety, matchUnit, priceFor, roomPasses } from './filters.js';
-import { BLR_HUBS, analyzeSocietyCommute, buildRoutesGeoJSON, geocodeOffice, getCustomTomTomKey, haversineKm, matchLocalPlaces, officeScoreKm, setCustomTomTomKey } from './commute.js';
+import { BLR_HUBS, analyzeSocietyCommute, buildRoutesGeoJSON, geocodeOffice, getCustomTomTomKey, haversineKm, localitiesInRadius, matchLocalPlaces, officeScoreKm, setCustomTomTomKey } from './commute.js';
 import { renderCommutePanel } from './commuteUi.js';
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +32,9 @@ let crit = structuredClone(DEFAULT_CRITERIA);
 let baseMode = BASE_MODES.includes(params.get('map')) ? params.get('map') : 'streets';
 let roomMode = 'off', areaUnit = 'sqft', sortBy = 'best';
 let data, byId, map, feed, selected = null, states = new Map(), tourTimer = null, cityId = 'bangalore', details = null;
+let mapShapes = null, mapPoints = null;
+const fetchedSlugs = new Set();
+let radiusFetchGen = 0;
 let myList = [], allAmenities = [];
 const highlights = { glow: true, bounds: true, labels: true, ...store.get('ff-highlights', {}) };
 const commuteCfg = { office1: null, office2: null, amTime: '08:30', pmTime: '17:30', percentile: 80, bias: 50, ...store.get('rv-commute', {}) };
@@ -88,6 +91,8 @@ async function boot() {
   }
   const points = { type: 'FeatureCollection', features: city.societies.map((s) => ({
     type: 'Feature', properties: { sid: s.id, name: s.name, show: 1 }, geometry: { type: 'Point', coordinates: [s.lng, s.lat] } })) };
+  mapShapes = shapes;
+  mapPoints = points;
   map.once('style.load', () => {
     addSocietyLayers(map, shapes, points);
     addBaseLayers(map);
@@ -536,6 +541,81 @@ function dropSearchPin(lat, lng) {
   }
   renderPinControls();
   applyFilters(true);
+  fetchListingsInRadius(crit.pin);
+}
+
+function tinyTowerFeature(s) {
+  const dLat = 0.00022, dLng = 0.00022;
+  const ring = [
+    [s.lng - dLng, s.lat - dLat], [s.lng + dLng, s.lat - dLat],
+    [s.lng + dLng, s.lat + dLat], [s.lng - dLng, s.lat + dLat], [s.lng - dLng, s.lat - dLat],
+  ];
+  return { type: 'Feature', properties: { sid: s.id, role: 'bld', h: 36 }, geometry: { type: 'Polygon', coordinates: [ring] } };
+}
+
+function mergeLiveSocieties(incoming) {
+  let added = 0, updated = 0;
+  const normName = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  for (const s of incoming) {
+    if (byId.has(s.id)) continue;
+    const sn = normName(s.name);
+    const existing = data.societies.find((e) => normName(e.name) === sn && haversineKm(e, s) < 0.8);
+    if (existing) {
+      // Merge live rent prices into existing society
+      existing.prices ||= {};
+      for (const [b, p] of Object.entries(s.prices || {})) {
+        if (p.rent && (!existing.prices[b]?.rent || p.rent.n > existing.prices[b].rent.n)) {
+          existing.prices[b] = { ...(existing.prices[b] || {}), rent: p.rent };
+        }
+      }
+      existing.rent_count = Math.max(existing.rent_count || 0, s.rent_count || 0);
+      updated++;
+      continue;
+    }
+    data.societies.push(s);
+    byId.set(s.id, s);
+    if (mapPoints) mapPoints.features.push({ type: 'Feature', properties: { sid: s.id, name: s.name, show: 1 }, geometry: { type: 'Point', coordinates: [s.lng, s.lat] } });
+    if (mapShapes) mapShapes.features.push(tinyTowerFeature(s));
+    added++;
+  }
+  if ((added || updated) && map && mapShapes && mapPoints) {
+    updateSocietySources(map, mapShapes, mapPoints);
+  }
+  return { added, updated };
+}
+
+async function fetchListingsInRadius(pin) {
+  if (!pin || cityId !== 'bangalore') return;
+  const gen = ++radiusFetchGen;
+  const targets = localitiesInRadius(pin.lat, pin.lng, pin.km, 8).filter((l) => !fetchedSlugs.has(l.slug));
+  const statusEl = $('pin-fetch-status');
+  if (!targets.length) {
+    if (statusEl) { statusEl.hidden = false; statusEl.textContent = `✓ All nearby areas within ${pin.km} km already loaded`; }
+    return;
+  }
+  if (statusEl) { statusEl.hidden = false; statusEl.textContent = `🔄 Fetching live rentals in ${targets[0].name}…`; }
+  let totalAdded = 0, totalUpdated = 0;
+  for (let i = 0; i < targets.length; i++) {
+    if (gen !== radiusFetchGen || !crit.pin) return;
+    const loc = targets[i];
+    if (statusEl) statusEl.textContent = `🔄 Fetching ${loc.name} (${i + 1}/${targets.length})…${totalAdded ? ` +${totalAdded} added` : ''}`;
+    try {
+      const res = await fetch(`/api/fetch-area?slug=${encodeURIComponent(loc.slug)}&city=${encodeURIComponent(cityId)}`);
+      if (!res.ok) continue;
+      const body = await res.json();
+      fetchedSlugs.add(loc.slug);
+      if (gen !== radiusFetchGen || !crit.pin) return;
+      const { added, updated } = mergeLiveSocieties(body.societies || []);
+      totalAdded += added;
+      totalUpdated += updated;
+      if (added || updated) applyFilters();
+    } catch { /* keep going for remaining localities */ }
+  }
+  if (gen === radiusFetchGen && statusEl) {
+    statusEl.textContent = totalAdded || totalUpdated
+      ? `✓ Background fetch done: +${totalAdded} new societies${totalUpdated ? `, ${totalUpdated} updated` : ''} near pin`
+      : `✓ Nearby areas checked (no extra listings found)`;
+  }
 }
 
 function renderPinControls() {
@@ -574,6 +654,7 @@ function buildPin() {
       if (map) setSearchPin(map, crit.pin);
       renderPinControls();
       applyFilters();
+      fetchListingsInRadius(crit.pin);
     }
   };
   document.querySelectorAll('#pin-chips button').forEach((b) => { b.onclick = () => setKm(+b.dataset.km); });

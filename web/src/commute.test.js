@@ -82,3 +82,15 @@ describe('local Bengaluru office & area directory', () => {
     expect(matchLocalPlaces('bellandur').length).toBeGreaterThan(0);
   });
 });
+
+import { localitiesInRadius } from './commute.js';
+
+describe('on-demand radius locality lookup', () => {
+  it('returns Bellandur and nearby localities within 5 km', () => {
+    const locs = localitiesInRadius(12.9259, 77.6762, 5);
+    const slugs = locs.map((l) => l.slug);
+    expect(slugs).toContain('bellandur');
+    expect(slugs).toContain('hsr-layout');
+    expect(slugs).not.toContain('yelahanka');
+  });
+});

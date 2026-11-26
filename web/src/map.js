@@ -95,6 +95,11 @@ export function setSelected(map, sid, prev) {
   if (sid) for (const src of ['shapes', 'pts']) map.setFeatureState({ source: src, id: sid }, { sel: true });
 }
 
+export function updateSocietySources(map, shapes, points) {
+  map?.getSource?.('shapes')?.setData(shapes);
+  map?.getSource?.('pts')?.setData(points);
+}
+
 // ---------- Streets view: a dark street map with road and area names, from OpenFreeMap vector tiles ----------
 const ROAD_W = (major, minor) => ['interpolate', ['exponential', 1.5], ['zoom'], 10, ['match', ['get', 'class'], ['motorway', 'trunk'], major * 0.4, ['primary', 'secondary'], minor * 0.5, 0.3],
   17, ['match', ['get', 'class'], ['motorway', 'trunk'], major * 5, ['primary', 'secondary'], minor * 5, ['tertiary', 'minor'], 8, 4]];

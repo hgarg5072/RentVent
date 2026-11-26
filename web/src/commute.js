@@ -80,6 +80,49 @@ export function matchLocalPlaces(query, kind = null) {
   });
 }
 
+// Bengaluru locality slugs for on-demand background rental fetching within a pinned radius.
+export const BLR_LOCALITY_SLUGS = [
+  { slug: 'bellandur', name: 'Bellandur', lat: 12.9259, lng: 77.6762 },
+  { slug: 'hsr-layout', name: 'HSR Layout', lat: 12.9121, lng: 77.6446 },
+  { slug: 'koramangala', name: 'Koramangala', lat: 12.9352, lng: 77.6245 },
+  { slug: 'indiranagar', name: 'Indiranagar', lat: 12.9784, lng: 77.6408 },
+  { slug: 'whitefield', name: 'Whitefield', lat: 12.9698, lng: 77.7500 },
+  { slug: 'marathahalli', name: 'Marathahalli', lat: 12.9591, lng: 77.6974 },
+  { slug: 'sarjapur-road', name: 'Sarjapur Road', lat: 12.9081, lng: 77.6858 },
+  { slug: 'electronic-city', name: 'Electronic City', lat: 12.8452, lng: 77.6602 },
+  { slug: 'kadubeesanahalli', name: 'Kadubeesanahalli', lat: 12.9378, lng: 77.6952 },
+  { slug: 'haralur-road', name: 'Haralur Road', lat: 12.9012, lng: 77.6578 },
+  { slug: 'mahadevapura', name: 'Mahadevapura', lat: 12.9896, lng: 77.6915 },
+  { slug: 'brookefield', name: 'Brookefield', lat: 12.9655, lng: 77.7176 },
+  { slug: 'btm-layout', name: 'BTM Layout', lat: 12.9166, lng: 77.6101 },
+  { slug: 'jp-nagar', name: 'JP Nagar', lat: 12.9063, lng: 77.5857 },
+  { slug: 'jayanagar', name: 'Jayanagar', lat: 12.9308, lng: 77.5838 },
+  { slug: 'hebbal', name: 'Hebbal', lat: 13.0358, lng: 77.5970 },
+  { slug: 'yelahanka', name: 'Yelahanka', lat: 13.1007, lng: 77.5963 },
+  { slug: 'bannerghatta-road', name: 'Bannerghatta Road', lat: 12.8891, lng: 77.5968 },
+  { slug: 'kanakapura-road', name: 'Kanakapura Road', lat: 12.8855, lng: 77.5528 },
+  { slug: 'kr-puram', name: 'KR Puram', lat: 13.0012, lng: 77.6954 },
+  { slug: 'hoodi', name: 'Hoodi', lat: 12.9922, lng: 77.7159 },
+  { slug: 'kudlu', name: 'Kudlu', lat: 12.8862, lng: 77.6558 },
+  { slug: 'varthur', name: 'Varthur', lat: 12.9389, lng: 77.7412 },
+  { slug: 'panathur', name: 'Panathur', lat: 12.9344, lng: 77.7048 },
+  { slug: 'kasavanahalli', name: 'Kasavanahalli', lat: 12.9069, lng: 77.6754 },
+  { slug: 'domlur', name: 'Domlur', lat: 12.9609, lng: 77.6387 },
+  { slug: 'cv-raman-nagar', name: 'CV Raman Nagar', lat: 12.9855, lng: 77.6639 },
+  { slug: 'hennur', name: 'Hennur', lat: 13.0398, lng: 77.6431 },
+  { slug: 'thanisandra', name: 'Thanisandra', lat: 13.0588, lng: 77.6335 },
+  { slug: 'banashankari', name: 'Banashankari', lat: 12.9255, lng: 77.5468 },
+];
+
+export function localitiesInRadius(lat, lng, km, maxCount = 8) {
+  const pt = { lat, lng };
+  return BLR_LOCALITY_SLUGS
+    .map((l) => ({ ...l, d: haversineKm(pt, l) }))
+    .filter((l) => l.d <= km + 2.5)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, maxCount);
+}
+
 const KEY_STORAGE = 'rentvent_tomtom_key';
 const memCache = new Map();
 
