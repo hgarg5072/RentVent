@@ -191,3 +191,76 @@ export function setHighlights(map, { glow = true, bounds = true, labels = true }
   map.setLayoutProperty('site-line', 'visibility', bounds ? 'visible' : 'none');
   map.setLayoutProperty('labels', 'visibility', labels ? 'visible' : 'none');
 }
+
+// ---------- CommuteIQ layers: office pins & live TomTom route polylines ----------
+const EMPTY_FC = { type: 'FeatureCollection', features: [] };
+
+export function addCommuteLayers(map) {
+  map.addSource('commute-routes', { type: 'geojson', data: EMPTY_FC });
+  map.addSource('office-pins', { type: 'geojson', data: EMPTY_FC });
+
+  map.addLayer({
+    id: 'commute-route-alt', type: 'line', source: 'commute-routes',
+    filter: ['==', ['get', 'primary'], 0],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ['match', ['get', 'role'], 'office2', '#c084fc', '#38bdf8'],
+      'line-width': 2.5, 'line-opacity': 0.45, 'line-dasharray': [2, 2],
+    },
+  });
+  map.addLayer({
+    id: 'commute-route-glow', type: 'line', source: 'commute-routes',
+    filter: ['==', ['get', 'primary'], 1],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ['match', ['get', 'role'], 'office2', '#c084fc', '#38bdf8'],
+      'line-width': 9, 'line-opacity': 0.22, 'line-blur': 4,
+    },
+  });
+  map.addLayer({
+    id: 'commute-route-main', type: 'line', source: 'commute-routes',
+    filter: ['==', ['get', 'primary'], 1],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ['match', ['get', 'role'], 'office2', '#c084fc', '#38bdf8'],
+      'line-width': 3.5, 'line-opacity': 0.95,
+    },
+  });
+  map.addLayer({
+    id: 'office-pin-ring', type: 'circle', source: 'office-pins',
+    paint: {
+      'circle-color': ['match', ['get', 'role'], 'office2', '#c084fc', '#38bdf8'],
+      'circle-radius': 14, 'circle-opacity': 0.22, 'circle-blur': 0.6,
+    },
+  });
+  map.addLayer({
+    id: 'office-pin-dot', type: 'circle', source: 'office-pins',
+    paint: {
+      'circle-color': ['match', ['get', 'role'], 'office2', '#c084fc', '#38bdf8'],
+      'circle-radius': 6.5, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2,
+    },
+  });
+  map.addLayer({
+    id: 'office-pin-lbl', type: 'symbol', source: 'office-pins',
+    layout: {
+      'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 11.5,
+      'text-offset': [0, 1.5], 'text-anchor': 'top',
+    },
+    paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,.9)', 'text-halo-width': 1.5 },
+  });
+}
+
+export function setOfficePins(map, office1, office2) {
+  const src = map?.getSource?.('office-pins');
+  if (!src) return;
+  const features = [];
+  if (office1) features.push({ type: 'Feature', properties: { role: 'office1', label: `Office 1 · ${office1.name}` }, geometry: { type: 'Point', coordinates: [office1.lng, office1.lat] } });
+  if (office2) features.push({ type: 'Feature', properties: { role: 'office2', label: `Office 2 · ${office2.name}` }, geometry: { type: 'Point', coordinates: [office2.lng, office2.lat] } });
+  src.setData({ type: 'FeatureCollection', features });
+}
+
+export function setCommuteRoutes(map, geojson) {
+  const src = map?.getSource?.('commute-routes');
+  if (!src) return;
+  src.setData(geojson || EMPTY_FC);
+}

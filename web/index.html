@@ -74,6 +74,42 @@
       <div class="k">Nearby</div>
       <div class="chips" id="f-near"></div>
     </section>
+    <section class="commute-box" id="commute-sec">
+      <div class="k row">CommuteIQ · Offices <button class="linkbtn" id="btn-tt-key" title="Optional custom TomTom API key">API key</button></div>
+      <div class="office-field">
+        <div class="search office-search">
+          <input id="off1-q" type="search" placeholder="Office 1 (e.g. Bagmane, Whitefield…)" autocomplete="off" aria-label="Office 1 location">
+          <ol id="off1-res" hidden></ol>
+        </div>
+        <div class="office-pill" id="off1-pill" hidden></div>
+        <div class="chips hub-chips" id="off1-hubs"></div>
+      </div>
+      <div id="off2-wrap" hidden>
+        <div class="search office-search">
+          <input id="off2-q" type="search" placeholder="Office 2 / Partner (optional)" autocomplete="off" aria-label="Office 2 location">
+          <ol id="off2-res" hidden></ol>
+        </div>
+        <div class="office-pill p2" id="off2-pill" hidden></div>
+        <div class="chips hub-chips" id="off2-hubs"></div>
+        <div id="off-bias-wrap" hidden>
+          <div class="k row">Office priority <span class="val" id="v-bias">50 / 50</span></div>
+          <input type="range" id="f-bias" min="0" max="100" step="5" value="50">
+        </div>
+      </div>
+      <div class="row-between">
+        <button class="linkbtn" id="btn-add-off2">+ Add 2nd office (dual-office)</button>
+        <span class="hint" id="commute-status"></span>
+      </div>
+      <div class="commute-opts" id="commute-opts" hidden>
+        <div class="commute-times">
+          <label><span>AM leave</span><input type="time" id="c-am" value="08:30"></label>
+          <label><span>PM leave</span><input type="time" id="c-pm" value="17:30"></label>
+        </div>
+        <div class="k row">Reliability <span class="seg small" id="c-pct">
+          <button data-p="50">P50</button><button data-p="75">P75</button><button data-p="80" class="on">P80</button><button data-p="90">P90</button><button data-p="95">P95</button>
+        </span></div>
+      </div>
+    </section>
     <section>
       <label class="sw"><input type="checkbox" id="f-ready"> Ready to move only</label>
     </section>
@@ -92,7 +128,7 @@
       <div class="sub" id="count-sub"></div>
     </div>
     <div class="k row">Results <select id="f-sort" aria-label="Sort results">
-      <option value="best">Best match</option><option value="score">Flat Finder score</option><option value="rating">Resident rating</option>
+      <option value="best">Best match</option><option value="commute">Closest to office(s)</option><option value="score">Flat Finder score</option><option value="rating">Resident rating</option>
       <option value="price">Price, low to high</option><option value="listings">Most listings</option></select></div>
     <div id="results"></div>
 

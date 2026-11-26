@@ -1,9 +1,11 @@
 import './style.css';
 import maplibregl from 'maplibre-gl';
-import { addBaseLayers, addSocietyLayers, BASE_MODES, createMap, OVERVIEW, setBaseMode, setHighlights, setSelected, setStates, startPulse } from './map.js';
+import { addBaseLayers, addCommuteLayers, addSocietyLayers, BASE_MODES, createMap, OVERVIEW, setBaseMode, setCommuteRoutes, setHighlights, setOfficePins, setSelected, setStates, startPulse } from './map.js';
 import { searchSocieties } from './search.js';
 import { createFeed } from './feed.js';
 import { AMENITY_KEYS, DEFAULT_CRITERIA, NEAR, RANK, feetLabel, formatINR, matchSociety, matchUnit, priceFor, roomPasses } from './filters.js';
+import { BLR_HUBS, analyzeSocietyCommute, buildRoutesGeoJSON, geocodeOffice, getCustomTomTomKey, haversineKm, officeScoreKm, setCustomTomTomKey } from './commute.js';
+import { renderCommutePanel } from './commuteUi.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -32,6 +34,8 @@ let roomMode = 'off', areaUnit = 'sqft', sortBy = 'best';
 let data, byId, map, feed, selected = null, states = new Map(), tourTimer = null, cityId = 'bangalore', details = null;
 let myList = [], allAmenities = [];
 const highlights = { glow: true, bounds: true, labels: true, ...store.get('ff-highlights', {}) };
+const commuteCfg = { office1: null, office2: null, amTime: '08:30', pmTime: '17:30', percentile: 80, bias: 50, ...store.get('rv-commute', {}) };
+let lastCommute = { sid: null, loading: false, error: null, analysis: null };
 
 async function boot() {
   const cities = await fetch('/data/cities.json').then((r) => r.json()).catch(() => ({ bangalore: { name: 'Bengaluru' } }));
@@ -63,6 +67,7 @@ async function boot() {
 
   feed = createFeed($('feed'), $('log-mode'), { events: city.events, byId });
   buildFilters();
+  buildCommute();
   buildSearch();
   buildList();
   buildControls();
@@ -83,6 +88,8 @@ async function boot() {
   map.once('style.load', () => {
     addSocietyLayers(map, shapes, points);
     addBaseLayers(map);
+    addCommuteLayers(map);
+    setOfficePins(map, commuteCfg.office1, commuteCfg.office2);
     setBaseMode(map, baseMode);
     setHighlights(map, highlights);
     startPulse(map);
@@ -278,6 +285,7 @@ function sorted(list) {
   const price = (s) => priceFor(s, crit.mode, crit.bhk)?.value ?? Infinity;
   const by = {
     best: (a, b) => RANK[states.get(b.id)] - RANK[states.get(a.id)] || b.verified - a.verified || (b.score || 0) - (a.score || 0),
+    commute: (a, b) => officeScoreKm(a, commuteCfg.office1, commuteCfg.office2, commuteCfg.bias) - officeScoreKm(b, commuteCfg.office1, commuteCfg.office2, commuteCfg.bias),
     score: (a, b) => (b.score || 0) - (a.score || 0),
     rating: (a, b) => (b.rating || 0) - (a.rating || 0) || (b.rating_count || 0) - (a.rating_count || 0),
     price: (a, b) => price(a) - price(b),
@@ -325,7 +333,10 @@ function resultItem(s) {
   const p = priceFor(s, crit.mode, crit.bhk);
   const money = p ? `${p.estimated ? '~' : ''}${formatINR(p.value)}${crit.mode === 'rent' ? '/mo' : ''}` : '';
   const how = s.verified ? ' · checked by hand' : s.ai_read ? ' · AI-read plans' : '';
-  li.innerHTML = `<span class="nm">${myList.includes(s.id) ? '★ ' : ''}${esc(s.name)}<small>${esc(s.locality || '')}${how}</small></span>
+  const offDist = commuteCfg.office1
+    ? ` · ${haversineKm(s, commuteCfg.office1).toFixed(1)} km${commuteCfg.office2 ? ` / ${haversineKm(s, commuteCfg.office2).toFixed(1)} km` : ''}`
+    : '';
+  li.innerHTML = `<span class="nm">${myList.includes(s.id) ? '★ ' : ''}${esc(s.name)}<small>${esc(s.locality || '')}${how}${offDist}</small></span>
     <span class="tag ${st}">${money}${s.score != null ? `<small>score ${s.score}</small>` : ''}</span>`;
   li.onclick = () => { stopTour(); openSociety(s.id); };
   return li;
@@ -353,6 +364,7 @@ function openSociety(sid, { fly = true } = {}) {
   document.body.classList.add('has-card');
   if (mobile) showMobile('society');
   renderCard(s);
+  refreshCommuteCard(s);
   feed.play(sid);
 }
 
@@ -361,6 +373,7 @@ function closeCard() {
   document.body.classList.remove('has-card');
   if (mobile) showMobile('search');
   if (map && selected) setSelected(map, null, selected);
+  if (map) setCommuteRoutes(map, null);
   selected = null;
   feed?.ambient();
 }
@@ -426,6 +439,8 @@ function renderCard(s) {
     <h4>Buy and rent</h4>
     ${priceRows ? `<table class="prices"><tr><th>Home</th><th>Buy</th><th>Rent</th></tr>${priceRows}</table>` : '<div class="fine">No price data.</div>'}
     ${trend}
+    <h4>CommuteIQ · Traffic &amp; Reliability</h4>
+    <div id="ciq-panel" class="ciq-panel"></div>
     <h4>Bedrooms</h4>
     ${unitRows ? `<table><tr><th>Unit</th><th>Bedrooms</th><th></th><th>Source</th></tr>${unitRows}</table>` : '<div class="fine">No unit types listed.</div>'}
     ${nearRows ? `<h4>Nearby</h4><div class="near">${nearRows}</div>` : ''}
@@ -444,7 +459,149 @@ function renderCard(s) {
   $('card').hidden = false;
   $('c-close').onclick = () => { stopTour(); closeCard(); };
   $('c-star').onclick = () => { toggle(myList, s.id); saveList(); renderCard(s); renderResults(); };
+  paintCommuteCard(s);
   if (!details) loadDetails().then(() => { if (selected === s.id) renderCard(s); });
+}
+
+function paintCommuteCard(s) {
+  const panel = $('ciq-panel');
+  if (!panel) return;
+  const state = lastCommute.sid === s.id ? lastCommute : { loading: false, error: null, analysis: null };
+  renderCommutePanel(panel, {
+    ...state,
+    config: commuteCfg,
+    onFocusOffice: () => {
+      if (mobile) showMobile('search');
+      $('off1-q')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      $('off1-q')?.focus();
+    },
+  });
+}
+
+async function refreshCommuteCard(s) {
+  if (!s) return;
+  if (!commuteCfg.office1 && !commuteCfg.office2) {
+    lastCommute = { sid: s.id, loading: false, error: null, analysis: null };
+    if (map) setCommuteRoutes(map, null);
+    paintCommuteCard(s);
+    return;
+  }
+  lastCommute = { sid: s.id, loading: true, error: null, analysis: null };
+  paintCommuteCard(s);
+  try {
+    const analysis = await analyzeSocietyCommute(s, commuteCfg);
+    if (selected !== s.id) return;
+    lastCommute = { sid: s.id, loading: false, error: null, analysis };
+    paintCommuteCard(s);
+    if (map) setCommuteRoutes(map, buildRoutesGeoJSON(analysis));
+  } catch (e) {
+    if (selected !== s.id) return;
+    lastCommute = { sid: s.id, loading: false, error: e?.message || 'TomTom request failed', analysis: null };
+    paintCommuteCard(s);
+    if (map) setCommuteRoutes(map, null);
+  }
+}
+
+function buildCommute() {
+  const saveCommute = () => {
+    store.set('rv-commute', commuteCfg);
+    if (map) setOfficePins(map, commuteCfg.office1, commuteCfg.office2);
+    renderCommuteControls();
+    renderResults();
+    if (selected && byId.get(selected)) refreshCommuteCard(byId.get(selected));
+  };
+
+  const wireOffice = (slot, inputId, resId, pillId, hubsId) => {
+    const input = $(inputId), ol = $(resId), hubs = $(hubsId);
+    let timer = null;
+    const setOff = (o) => {
+      commuteCfg[slot] = o;
+      input.value = '';
+      ol.hidden = true;
+      if (o && sortBy === 'best' && slot === 'office1') {
+        // Keep current sort, but let user see distances immediately
+      }
+      saveCommute();
+    };
+    hubs.replaceChildren(...BLR_HUBS.slice(0, 4).map((h) => chip(h.short, false, () => setOff(h), 'chip hub-chip')));
+    input.oninput = () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { ol.hidden = true; return; }
+      timer = setTimeout(async () => {
+        try {
+          const center = data?.city?.center ? { lng: data.city.center[0], lat: data.city.center[1] } : { lat: 12.9716, lng: 77.5946 };
+          const hits = await geocodeOffice(q, center);
+          ol.replaceChildren(...(hits.length ? hits.map((h) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>${esc(h.name)}</span><span class="tag">${esc(h.address.split(',').slice(0, 2).join(','))}</span>`;
+            li.onclick = () => setOff(h);
+            return li;
+          }) : [Object.assign(document.createElement('li'), { className: 'empty', textContent: 'No matching office found' })]));
+          ol.hidden = false;
+        } catch (err) {
+          ol.replaceChildren(Object.assign(document.createElement('li'), { className: 'empty', textContent: err.message }));
+          ol.hidden = false;
+        }
+      }, 320);
+    };
+    document.addEventListener('click', (e) => { if (!e.target.closest(`#${inputId}`) && !e.target.closest(`#${resId}`)) ol.hidden = true; });
+  };
+
+  const renderCommuteControls = () => {
+    const renderPill = (slot, pillId, hubsId) => {
+      const o = commuteCfg[slot], pill = $(pillId), hubs = $(hubsId);
+      pill.hidden = !o;
+      hubs.hidden = !!o || cityId !== 'bangalore';
+      if (o) {
+        pill.innerHTML = `<span><i class="dot ${slot === 'office1' ? 'o1' : 'o2'}"></i> ${esc(o.name)}</span><button class="iconbtn" aria-label="Clear office">×</button>`;
+        pill.querySelector('button').onclick = () => { commuteCfg[slot] = null; saveCommute(); };
+      }
+    };
+    renderPill('office1', 'off1-pill', 'off1-hubs');
+    renderPill('office2', 'off2-pill', 'off2-hubs');
+    const hasAny = !!(commuteCfg.office1 || commuteCfg.office2);
+    $('commute-opts').hidden = !hasAny;
+    $('off2-wrap').hidden = !$('off2-wrap').dataset.open && !commuteCfg.office2;
+    $('btn-add-off2').textContent = $('off2-wrap').hidden ? '+ Add 2nd office (dual-office)' : 'Hide 2nd office';
+    $('off-bias-wrap').hidden = !(commuteCfg.office1 && commuteCfg.office2);
+    $('f-bias').value = commuteCfg.bias;
+    $('v-bias').textContent = `${100 - commuteCfg.bias}% O1 / ${commuteCfg.bias}% O2`;
+    $('c-am').value = commuteCfg.amTime || '08:30';
+    $('c-pm').value = commuteCfg.pmTime || '17:30';
+    document.querySelectorAll('#c-pct button').forEach((b) => b.classList.toggle('on', +b.dataset.p === commuteCfg.percentile));
+    $('commute-status').textContent = hasAny ? 'Click any society for live traffic' : '';
+  };
+
+  wireOffice('office1', 'off1-q', 'off1-res', 'off1-pill', 'off1-hubs');
+  wireOffice('office2', 'off2-q', 'off2-res', 'off2-pill', 'off2-hubs');
+
+  $('btn-add-off2').onclick = () => {
+    const open = $('off2-wrap').hidden;
+    $('off2-wrap').dataset.open = open ? '1' : '';
+    $('off2-wrap').hidden = !open;
+    renderCommuteControls();
+  };
+  $('f-bias').oninput = () => { commuteCfg.bias = +$('f-bias').value; $('v-bias').textContent = `${100 - commuteCfg.bias}% O1 / ${commuteCfg.bias}% O2`; store.set('rv-commute', commuteCfg); renderResults(); };
+  $('c-am').onchange = () => { commuteCfg.amTime = $('c-am').value || '08:30'; saveCommute(); };
+  $('c-pm').onchange = () => { commuteCfg.pmTime = $('c-pm').value || '17:30'; saveCommute(); };
+  document.querySelectorAll('#c-pct button').forEach((b) => {
+    b.onclick = () => {
+      commuteCfg.percentile = +b.dataset.p;
+      store.set('rv-commute', commuteCfg);
+      renderCommuteControls();
+      if (selected && byId.get(selected)) paintCommuteCard(byId.get(selected));
+    };
+  });
+  $('btn-tt-key').onclick = () => {
+    const cur = getCustomTomTomKey();
+    const next = prompt('Optional custom TomTom API key (leave blank to use RentVent server key):', cur);
+    if (next !== null) {
+      setCustomTomTomKey(next);
+      if (selected && byId.get(selected)) refreshCommuteCard(byId.get(selected));
+    }
+  };
+  renderCommuteControls();
 }
 
 let detailsPromise = null;

@@ -1,0 +1,382 @@
+// CommuteIQ engine for RentVent: TomTom live/historical routing, FHWA SHRP2 reliability percentiles,
+// hourly curves (6 AM - 10 PM), Mon-Sun congestion heatmap, dual-office household scorecard, and arrival confidence.
+
+export const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+export const PERCENTILES = [50, 75, 80, 90, 95];
+
+export const DAY_CONGESTION_FACTORS = {
+  Monday: 0.96,
+  Tuesday: 1.10,
+  Wednesday: 1.15,
+  Thursday: 1.12,
+  Friday: 0.94,
+  Saturday: 0.70,
+  Sunday: 0.55,
+};
+
+export const BLR_HUBS = [
+  { id: 'google_ananta', name: 'Google Ananta (Bagmane ORR)', short: 'Bagmane / ORR', lat: 12.9826, lng: 77.6916 },
+  { id: 'ecity_broadcom', name: 'Electronic City Phase 1', short: 'Electronic City', lat: 12.8378, lng: 77.6546 },
+  { id: 'whitefield_itpb', name: 'Whitefield (ITPL / ITPB)', short: 'Whitefield ITPL', lat: 12.9855, lng: 77.7364 },
+  { id: 'bellandur_ecoworld', name: 'Bellandur (RMZ Ecoworld)', short: 'Ecoworld ORR', lat: 12.9212, lng: 77.6815 },
+  { id: 'manyata', name: 'Manyata Tech Park (Hebbal)', short: 'Manyata Hebbal', lat: 13.0458, lng: 77.6203 },
+  { id: 'koramangala', name: 'Koramangala / Sony Signal', short: 'Koramangala', lat: 12.9352, lng: 77.6245 },
+];
+
+const KEY_STORAGE = 'rentvent_tomtom_key';
+const memCache = new Map();
+
+export function getCustomTomTomKey() {
+  try { return localStorage.getItem(KEY_STORAGE)?.trim() || ''; } catch { return ''; }
+}
+export function setCustomTomTomKey(key) {
+  try {
+    if (key?.trim()) localStorage.setItem(KEY_STORAGE, key.trim());
+    else localStorage.removeItem(KEY_STORAGE);
+  } catch { /* ignore */ }
+}
+
+export function haversineKm(a, b) {
+  if (!a || !b || a.lat == null || b.lat == null) return Infinity;
+  const r = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * r;
+  const dLng = (b.lng - a.lng) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+
+export function officeScoreKm(society, office1, office2, bias = 50) {
+  if (!office1) return Infinity;
+  const d1 = haversineKm(society, office1);
+  if (!office2) return d1;
+  const d2 = haversineKm(society, office2);
+  const w2 = Math.max(0, Math.min(100, bias)) / 100;
+  const w1 = 1 - w2;
+  return d1 * w1 + d2 * w2;
+}
+
+/**
+ * FHWA SHRP2 travel-time reliability percentiles (P10, P50, P75, P80, P90, P95).
+ */
+export function calculatePercentiles(freeFlowSeconds, expectedSeconds) {
+  const freeFlowMin = Math.max(1, Math.round(freeFlowSeconds / 60));
+  const expectedMin = Math.max(freeFlowMin, Math.round(expectedSeconds / 60));
+  const delayMin = Math.max(0, expectedMin - freeFlowMin);
+  const congestionMultiplier = Number((expectedMin / freeFlowMin).toFixed(2));
+
+  const sigma = delayMin === 0
+    ? Math.max(2, Math.round(freeFlowMin * 0.08))
+    : Math.max(3, Math.round(delayMin * 0.45 + (congestionMultiplier - 1.0) * freeFlowMin * 0.18));
+
+  return {
+    freeFlowMinutes: Math.max(freeFlowMin, Math.round(expectedMin - 1.28 * sigma)),
+    medianMinutes: expectedMin,
+    p75Minutes: Math.round(expectedMin + 0.674 * sigma),
+    p80Minutes: Math.round(expectedMin + 0.8416 * sigma),
+    p90Minutes: Math.round(expectedMin + 1.282 * sigma),
+    p95Minutes: Math.round(expectedMin + 1.645 * sigma),
+    congestionMultiplier,
+  };
+}
+
+export function pickPercentile(sample, pct = 80) {
+  if (!sample) return 0;
+  if (pct === 50) return sample.medianMinutes;
+  if (pct === 75) return sample.p75Minutes;
+  if (pct === 80) return sample.p80Minutes;
+  if (pct === 90) return sample.p90Minutes;
+  return sample.p95Minutes;
+}
+
+export function generateHourlyCommuteCurve(direction, baseFreeFlowMin, basePeakDelayMin, day = 'Wednesday') {
+  const dayFactor = DAY_CONGESTION_FACTORS[day] ?? 1.0;
+  const samples = [];
+
+  for (let hour = 6; hour <= 22; hour++) {
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    const timeLabel = `${displayHour}:00 ${ampm}`;
+    let f = 0.08;
+
+    if (direction === 'inbound') {
+      if (hour === 7) f = 0.55;
+      else if (hour === 8) f = 0.95;
+      else if (hour === 9) f = 1.0;
+      else if (hour === 10) f = 0.50;
+      else if (hour >= 11 && hour <= 14) f = 0.25;
+      else if (hour >= 16 && hour <= 19) f = 0.55;
+    } else {
+      if (hour >= 7 && hour <= 9) f = 0.40;
+      else if (hour >= 11 && hour <= 14) f = 0.25;
+      else if (hour === 15) f = 0.50;
+      else if (hour === 16) f = 0.85;
+      else if (hour === 17) f = 1.0;
+      else if (hour === 18) f = 0.92;
+      else if (hour === 19) f = 0.65;
+      else if (hour === 20) f = 0.35;
+      else if (hour === 21) f = 0.15;
+    }
+
+    if (day === 'Friday' && direction === 'outbound') {
+      if (hour === 15) f = 0.80;
+      else if (hour === 16) f = 1.0;
+      else if (hour === 17) f = 0.85;
+      else if (hour === 18) f = 0.50;
+    }
+
+    const expectedMin = baseFreeFlowMin + Math.round(basePeakDelayMin * f * dayFactor);
+    const p = calculatePercentiles(baseFreeFlowMin * 60, expectedMin * 60);
+    samples.push({ hour, timeLabel, ...p });
+  }
+  return samples;
+}
+
+export function generateWeeklyHeatmap(amFreeFlowMin, amPeakDelayMin, pmFreeFlowMin, pmPeakDelayMin, amHour = 8, pmHour = 18) {
+  return DAYS.map((day) => {
+    const amCurve = generateHourlyCommuteCurve('inbound', amFreeFlowMin, amPeakDelayMin, day);
+    const pmCurve = generateHourlyCommuteCurve('outbound', pmFreeFlowMin, pmPeakDelayMin, day);
+    const am = amCurve.find((x) => x.hour === amHour) || amCurve[2];
+    const pm = pmCurve.find((x) => x.hour === pmHour) || pmCurve[12];
+    return {
+      day,
+      short: day.slice(0, 3),
+      am,
+      pm,
+      totalP50: am.medianMinutes + pm.medianMinutes,
+      totalP80: am.p80Minutes + pm.p80Minutes,
+      totalP95: am.p95Minutes + pm.p95Minutes,
+    };
+  });
+}
+
+export function parseTimeToMinutes(hhmm) {
+  const [h, m] = String(hhmm || '09:00').split(':').map(Number);
+  return (Number.isFinite(h) ? h : 9) * 60 + (Number.isFinite(m) ? m : 0);
+}
+
+export function formatClock(totalMinutes) {
+  const mins = ((totalMinutes % 1440) + 1440) % 1440;
+  const h24 = Math.floor(mins / 60);
+  const m = mins % 60;
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+export function calculateArrivalWindows(targetArrivalHHMM, sample) {
+  const target = parseTimeToMinutes(targetArrivalHHMM);
+  return {
+    targetLabel: formatClock(target),
+    p50Leave: formatClock(target - sample.medianMinutes),
+    p80Leave: formatClock(target - sample.p80Minutes),
+    p95Leave: formatClock(target - sample.p95Minutes),
+    bufferMin: sample.p95Minutes - sample.medianMinutes,
+  };
+}
+
+/**
+ * Next upcoming Wednesday at given local IST time (HH:MM) as ISO string for TomTom historical traffic.
+ */
+export function nextWeekdayDepartISO(hhmm = '08:30') {
+  const [h, m] = String(hhmm).split(':').map(Number);
+  const now = new Date();
+  const d = new Date(now.getTime());
+  // Move to next Wednesday (day 3) in the future so TomTom returns full historic weekday traffic
+  const diff = (3 - d.getDay() + 7) % 7 || 7;
+  d.setDate(d.getDate() + diff);
+  // Format as IST (+05:30)
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(h || 8)}:${pad(m || 30)}:00+05:30`;
+}
+
+async function tomtomFetch(pathAndQuery) {
+  const customKey = getCustomTomTomKey();
+  const headers = { Accept: 'application/json' };
+  if (customKey) headers['X-TomTom-Key'] = customKey;
+  const res = await fetch(`/api/tomtom/${pathAndQuery}`, { headers });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    let msg = `TomTom proxy HTTP ${res.status}`;
+    try { msg = JSON.parse(txt).error || msg; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function geocodeOffice(query, center = { lat: 12.9716, lng: 77.5946 }) {
+  const q = encodeURIComponent(query.trim());
+  if (!q) return [];
+  const qs = new URLSearchParams({
+    limit: '6',
+    countrySet: 'IN',
+    lat: String(center.lat),
+    lon: String(center.lng),
+    radius: '50000',
+  });
+  const data = await tomtomFetch(`search/2/search/${q}.json?${qs.toString()}`);
+  return (data.results || []).map((r) => ({
+    name: r.poi?.name || r.address?.freeformAddress || query,
+    address: r.address?.freeformAddress || '',
+    lat: r.position.lat,
+    lng: r.position.lon,
+  }));
+}
+
+export async function fetchTomTomRoute(origin, dest, departAtISO) {
+  const loc = `${origin.lat},${origin.lng}:${dest.lat},${dest.lng}`;
+  const qs = new URLSearchParams({
+    departAt: departAtISO,
+    traffic: 'true',
+    computeTravelTimeFor: 'all',
+    maxAlternatives: '2',
+  });
+  const data = await tomtomFetch(`routing/1/calculateRoute/${loc}/json?${qs.toString()}`);
+  if (!data.routes?.length) throw new Error('No route found');
+
+  const routes = data.routes.map((r, idx) => {
+    const s = r.summary || {};
+    const distKm = Number(((s.lengthInMeters || 0) / 1000).toFixed(1));
+    const expectedSec = s.historicTrafficTravelTimeInSeconds || s.travelTimeInSeconds || 900;
+    const freeFlowSec = s.noTrafficTravelTimeInSeconds || Math.round(expectedSec * 0.58);
+    const pcts = calculatePercentiles(freeFlowSec, expectedSec);
+    const pts = (r.legs?.[0]?.points || []).map((p) => [p.longitude, p.latitude]); // GeoJSON [lng, lat]
+    return {
+      idx,
+      label: idx === 0 ? 'Primary fastest route' : `Alternative route ${idx + 1}`,
+      distKm,
+      freeFlowSec,
+      expectedSec,
+      ...pcts,
+      coordinates: pts,
+    };
+  });
+  return routes;
+}
+
+export function buildOfficeLegAnalysis(office, amRoutes, pmRoutes, amTime = '08:30', pmTime = '17:30') {
+  const am = amRoutes[0];
+  const pm = pmRoutes[0];
+  const amHour = Math.max(6, Math.min(22, parseInt(amTime.split(':')[0], 10) || 8));
+  const pmHour = Math.max(6, Math.min(22, parseInt(pmTime.split(':')[0], 10) || 18));
+
+  const amDelay = Math.max(2, am.medianMinutes - am.freeFlowMinutes);
+  const pmDelay = Math.max(2, pm.medianMinutes - pm.freeFlowMinutes);
+  const amCurve = generateHourlyCommuteCurve('inbound', am.freeFlowMinutes, amDelay, 'Wednesday');
+  const pmCurve = generateHourlyCommuteCurve('outbound', pm.freeFlowMinutes, pmDelay, 'Wednesday');
+  const weekly = generateWeeklyHeatmap(am.freeFlowMinutes, amDelay, pm.freeFlowMinutes, pmDelay, amHour, pmHour);
+
+  // Predictability score (0-100): tighter P95/P50 ratio => higher predictability
+  const spreadRatio = ((am.p95Minutes / Math.max(1, am.medianMinutes)) + (pm.p95Minutes / Math.max(1, pm.medianMinutes))) / 2;
+  const predictabilityScore = Math.max(20, Math.min(98, Math.round(115 - (spreadRatio - 1) * 110)));
+  const predictabilityLabel = predictabilityScore >= 75 ? 'High reliability' : predictabilityScore >= 55 ? 'Moderate variance' : 'High junction volatility';
+
+  // Estimated monthly fuel cost (22 workdays, ₹102/L petrol, ~11 km/L city mileage)
+  const dailyKm = am.distKm + pm.distKm;
+  const monthlyFuelINR = Math.round((dailyKm * 22 / 11) * 102);
+
+  return {
+    office,
+    am,
+    pm,
+    amAlternatives: amRoutes,
+    pmAlternatives: pmRoutes,
+    amCurve,
+    pmCurve,
+    weekly,
+    dailyKm: Number(dailyKm.toFixed(1)),
+    monthlyFuelINR,
+    predictabilityScore,
+    predictabilityLabel,
+  };
+}
+
+export function summarizeHousehold(legs, percentile = 80, workDaysPerWeek = 5) {
+  const perLeg = legs.map((leg) => {
+    const amMin = pickPercentile(leg.am, percentile);
+    const pmMin = pickPercentile(leg.pm, percentile);
+    const dailyMin = amMin + pmMin;
+    return {
+      officeName: leg.office.name,
+      amMin,
+      pmMin,
+      dailyMin,
+      weeklyHours: Number(((dailyMin * workDaysPerWeek) / 60).toFixed(1)),
+      annualHours: Math.round((dailyMin * workDaysPerWeek * 48) / 60),
+      monthlyFuelINR: leg.monthlyFuelINR,
+      dailyKm: leg.dailyKm,
+      predictabilityScore: leg.predictabilityScore,
+      predictabilityLabel: leg.predictabilityLabel,
+    };
+  });
+
+  const totalDailyMin = perLeg.reduce((a, b) => a + b.dailyMin, 0);
+  const totalWeeklyHours = Number(perLeg.reduce((a, b) => a + b.weeklyHours, 0).toFixed(1));
+  const totalAnnualHours = perLeg.reduce((a, b) => a + b.annualHours, 0);
+  const totalFuelINR = perLeg.reduce((a, b) => a + b.monthlyFuelINR, 0);
+  const parityDeltaMin = perLeg.length === 2 ? Math.abs(perLeg[0].dailyMin - perLeg[1].dailyMin) : 0;
+  const avgDailyPerPerson = totalDailyMin / Math.max(1, perLeg.length);
+  const verdict = avgDailyPerPerson <= 50 ? 'Optimal Commute'
+    : avgDailyPerPerson <= 80 ? 'Good Commute'
+      : avgDailyPerPerson <= 115 ? 'Moderate Commute' : 'High Commute Burden';
+
+  return {
+    percentile,
+    perLeg,
+    totalDailyMin,
+    totalWeeklyHours,
+    totalAnnualHours,
+    totalFuelINR,
+    parityDeltaMin,
+    verdict,
+  };
+}
+
+export async function analyzeSocietyCommute(society, { office1, office2, amTime = '08:30', pmTime = '17:30' }) {
+  const offices = [office1, office2].filter(Boolean);
+  if (!offices.length) return null;
+
+  const cacheKey = `rv_c_${society.id}_${offices.map((o) => `${o.lat.toFixed(4)},${o.lng.toFixed(4)}`).join('|')}_${amTime}_${pmTime}`;
+  if (memCache.has(cacheKey)) return memCache.get(cacheKey);
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      memCache.set(cacheKey, parsed);
+      return parsed;
+    }
+  } catch { /* ignore */ }
+
+  const amISO = nextWeekdayDepartISO(amTime);
+  const pmISO = nextWeekdayDepartISO(pmTime);
+
+  const legs = await Promise.all(offices.map(async (office) => {
+    const [amRoutes, pmRoutes] = await Promise.all([
+      fetchTomTomRoute(society, office, amISO),
+      fetchTomTomRoute(office, society, pmISO),
+    ]);
+    return buildOfficeLegAnalysis(office, amRoutes, pmRoutes, amTime, pmTime);
+  }));
+
+  const result = { societyId: society.id, legs, fetchedAt: Date.now() };
+  memCache.set(cacheKey, result);
+  try { sessionStorage.setItem(cacheKey, JSON.stringify(result)); } catch { /* ignore */ }
+  return result;
+}
+
+export function buildRoutesGeoJSON(analysis) {
+  if (!analysis?.legs?.length) return { type: 'FeatureCollection', features: [] };
+  const features = [];
+  analysis.legs.forEach((leg, officeIdx) => {
+    const role = officeIdx === 0 ? 'office1' : 'office2';
+    (leg.amAlternatives || []).forEach((route, rIdx) => {
+      if (route.coordinates?.length > 1) {
+        features.push({
+          type: 'Feature',
+          properties: { role, primary: rIdx === 0 ? 1 : 0, label: route.label },
+          geometry: { type: 'LineString', coordinates: route.coordinates },
+        });
+      }
+    });
+  });
+  return { type: 'FeatureCollection', features };
+}
