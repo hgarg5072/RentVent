@@ -126,7 +126,7 @@ describe('ranges', () => {
     expect(matchSociety(s, crit({ minSqft: 1500, maxSqft: 2500 }))).toBe('match');
   });
   it('price and rent lower end', () => {
-    expect(matchSociety(s, crit({ minPrice: 4e7 }))).toBe('no');
+    expect(matchSociety(s, crit({ mode: 'buy', minPrice: 4e7 }))).toBe('no');
     expect(matchSociety(s, crit({ mode: 'rent', minRent: 50000, maxRent: 80000 }))).toBe('match');
   });
 });

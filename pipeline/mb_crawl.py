@@ -1,8 +1,8 @@
 """Polite, cached, resumable Magicbricks crawler.
 
-usage: python mb_crawl.py list <city>      # all list pages -> out/<city>/mb_index.json
-       python mb_crawl.py projects <city>  # every project page -> out/<city>/mb_projects.json
-<city> is a key in data/cities.json (default gurgaon).
+usage: python mb_crawl.py list <city> [--max-pages N]      # list pages -> out/<city>/mb_index.json
+       python mb_crawl.py projects <city> [--limit N]      # project pages -> out/<city>/mb_projects.json
+<city> is a key in data/cities.json (default bangalore).
 """
 import gzip
 import hashlib
@@ -18,12 +18,20 @@ ROOT = pathlib.Path(__file__).parent
 CACHE = ROOT / "cache" / "mb"
 OUT = ROOT / "out"
 CITIES = json.loads((ROOT.parent / "data" / "cities.json").read_text())
-CITY = next((a for a in sys.argv[1:] if a in CITIES), "gurgaon")
+CITY = next((a for a in sys.argv[1:] if a in CITIES), "bangalore")
 CFG = CITIES[CITY]
 LIST_URL = "https://www.magicbricks.com/residential-projects-in-" + CFG["magicbricks"] + "-nprid/page-{}"
 OUT = OUT / CITY
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 DELAY = 1.0
+
+
+def _int_flag(name):
+    if name in sys.argv:
+        idx = sys.argv.index(name)
+        if idx + 1 < len(sys.argv):
+            return int(sys.argv[idx + 1])
+    return None
 
 
 def fetch(url):
@@ -48,6 +56,9 @@ def crawl_list():
     first = fetch(LIST_URL.format(1))
     total = mb_parse.parse_total(first)
     pages = -(-total // 20)
+    max_pages = _int_flag("--max-pages")
+    if max_pages:
+        pages = min(pages, max_pages)
     projects = {}
     for n in range(1, pages + 1):
         html = fetch(LIST_URL.format(n))
@@ -63,6 +74,9 @@ def crawl_list():
 
 def crawl_projects():
     index = json.loads((OUT / "mb_index.json").read_text())
+    limit = _int_flag("--limit")
+    if limit:
+        index = index[:limit]
     from concurrent.futures import ThreadPoolExecutor
 
     def one(p):
@@ -78,7 +92,7 @@ def crawl_projects():
     with ThreadPoolExecutor(max_workers=3) as ex:
         for i, merged in enumerate(ex.map(one, index), 1):
             out.append(merged)
-            if i % 100 == 0 or i == len(index):
+            if i % 25 == 0 or i == len(index):
                 print(f"project {i}/{len(index)}", flush=True)
                 (OUT / "mb_projects.json").write_text(json.dumps(out, indent=0))
 

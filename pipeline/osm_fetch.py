@@ -102,7 +102,8 @@ def main():
     (OUT / "osm_areas.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
     print("areas", len(feats))
 
-    blds = overpass(f'[out:json][timeout:280];way["building"]{bb};out geom;', "buildings")
+    bld_filter = 'way["building"~"apartments|residential"]' if (n - s) * (e - w) > 0.1 else 'way["building"]'
+    blds = overpass(f'[out:json][timeout:280];{bld_filter}{bb};out geom;', "buildings")
     bf = []
     for el in blds["elements"]:
         if "geometry" not in el:

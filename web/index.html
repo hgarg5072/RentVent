@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>Flat Finder</title>
-  <meta name="description" content="Every housing society in Gurugram on one map. Filter by the smallest bedroom you can live with, buy or rent budget, amenities and what is nearby.">
+  <title>RentVent · Bengaluru</title>
+  <meta name="description" content="Housing societies in Bengaluru on one interactive map. Filter by monthly rent, BHK, smallest bedroom size, amenities and nearby metro or parks.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
@@ -24,16 +24,16 @@
   <div class="mtabs" id="mtabs"><button data-t="search" class="on">Search</button><button data-t="society" id="mt-society" disabled>Society</button><button class="collapse" id="m-collapse" aria-label="Collapse panel">⌄</button></div>
 
   <aside class="panel left" id="filters">
-    <div class="k">Flat Finder · <select id="city-pick" aria-label="City"></select></div>
+    <div class="k">RentVent · <select id="city-pick" aria-label="City"></select></div>
     <h1 class="ttl">Find the flat that fits.</h1>
     <div class="search">
-      <input id="q" type="search" placeholder="Search a society, developer or sector" autocomplete="off" aria-label="Search societies">
+      <input id="q" type="search" placeholder="Search a society, developer or locality" autocomplete="off" aria-label="Search societies">
       <kbd>/</kbd>
       <ol id="q-results" hidden></ol>
     </div>
     <div class="row-between">
-      <div class="seg" id="f-mode"><button data-m="buy">Buy</button><button data-m="rent">Rent</button></div>
-      <button class="preset" id="preset-divy">Load Divy's search</button>
+      <div class="seg" id="f-mode"><button data-m="rent">Rent</button><button data-m="buy">Buy</button></div>
+      <button class="preset" id="preset-divy">BLR 2–3 BHK &lt; ₹60k</button>
     </div>
     <div class="pill" id="q-pill" hidden></div>
 
@@ -147,7 +147,7 @@
     <div class="sheet">
       <h3>Add societies to my list</h3>
       <p class="fine">Paste names, one per line or separated by commas. We match each to the closest society.</p>
-      <textarea id="paste-text" rows="7" placeholder="Heritage One&#10;Pioneer Araya&#10;DLF Camellias"></textarea>
+      <textarea id="paste-text" rows="7" placeholder="Prestige Shantiniketan&#10;Sobha Dream Acres&#10;Brigade Lakefront"></textarea>
       <div class="fine" id="paste-result"></div>
       <div class="row-between"><button class="linkbtn" id="paste-clear">Clear my list</button><span class="row-gap"><button class="ghost" id="paste-cancel">Close</button><button class="primary" id="paste-add">Add to my list</button></span></div>
     </div>

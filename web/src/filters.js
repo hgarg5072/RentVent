@@ -15,7 +15,7 @@ export const DEFAULT_CRITERIA = {
   maxSqft: null,
   minPrice: null,   // rupees, buying
   minRent: null,    // rupees per month
-  mode: 'buy',      // 'buy' or 'rent'
+  mode: 'rent',     // 'rent' or 'buy' (rent-first for RentVent)
   maxPrice: null,   // rupees, buying
   maxRent: null,    // rupees per month, renting
   amenities: [],    // amenity keys, see AMENITY_KEYS

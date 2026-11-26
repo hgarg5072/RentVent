@@ -4,7 +4,7 @@ import { DEFAULT_CRITERIA, NEAR, feetLabel, formatINR, hasAmenity, matchSociety,
 import { searchSocieties } from '../src/search.js';
 
 const PROTOCOL = '2025-06-18';
-const SITE = 'https://flat-finder.pages.dev';
+const SITE = 'https://rentvent.pages.dev';
 const cache = new Map();
 
 async function city(env, origin, id) {
@@ -19,9 +19,9 @@ async function city(env, origin, id) {
 const KINDS = ['apartment', 'builder floor', 'villa', 'plot', 'commercial', 'other'];
 const PLACES = ['park', 'metro', 'rail', 'school', 'hospital', 'shopping'];
 const FILTERS = {
-  city: { type: 'string', description: 'City id, e.g. "gurgaon"', default: 'gurgaon' },
-  mode: { type: 'string', enum: ['buy', 'rent'], default: 'buy', description: 'Which price the budget and price sorting use' },
-  localities: { type: 'array', items: { type: 'string' }, description: 'Sectors or localities, e.g. ["Sector 56", "Golf Course Road"] or ["56", "57"]. Matches the locality exactly, or as its start ("Sohna" also matches "Sohna Road"). Use list_localities to see names.' },
+  city: { type: 'string', description: 'City id, e.g. "bangalore" or "gurgaon"', default: 'bangalore' },
+  mode: { type: 'string', enum: ['rent', 'buy'], default: 'rent', description: 'Which price the budget and price sorting use' },
+  localities: { type: 'array', items: { type: 'string' }, description: 'Localities or areas, e.g. ["Whitefield", "HSR Layout", "Sarjapur Road"]. Matches the locality exactly, or as its start. Use list_localities to see names.' },
   name_contains: { type: 'string', description: 'Words that must appear in the society name, developer or locality, e.g. "DLF" or "Ireo"' },
   within_km_of: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' }, km: { type: 'number' } }, required: ['lat', 'lng', 'km'], description: 'Only societies within km of a point, e.g. an office. Results then show distance_km.' },
   bhk: { type: 'array', items: { type: 'integer' }, description: 'BHK types, e.g. [3,4]' },
@@ -59,18 +59,18 @@ const TOOLS = [
   },
   {
     name: 'list_localities',
-    description: 'Every sector or locality in a city with its number of societies and its centre point. Use to find the exact locality names.',
-    inputSchema: { type: 'object', properties: { city: { type: 'string', default: 'gurgaon' }, contains: { type: 'string' } } },
+    description: 'Every locality in a city with its number of societies and its centre point. Use to find the exact locality names.',
+    inputSchema: { type: 'object', properties: { city: { type: 'string', default: 'bangalore' }, contains: { type: 'string' } } },
   },
   {
     name: 'get_society',
     description: 'Full details for one society by name: unit types and bedroom sizes with sources, buy and rent prices per BHK, resident ratings by category, review snippets, description, nearby places, amenities and links.',
-    inputSchema: { type: 'object', properties: { city: { type: 'string', default: 'gurgaon' }, name: { type: 'string' } }, required: ['name'] },
+    inputSchema: { type: 'object', properties: { city: { type: 'string', default: 'bangalore' }, name: { type: 'string' } }, required: ['name'] },
   },
   {
     name: 'compare_societies',
     description: 'Side-by-side comparison of up to 10 societies by name: per-BHK prices, rents, sizes, smallest bedrooms, score, rating, nearby, amenities.',
-    inputSchema: { type: 'object', properties: { city: { type: 'string', default: 'gurgaon' }, mode: { type: 'string', enum: ['buy', 'rent'], default: 'buy' }, names: { type: 'array', items: { type: 'string' }, maxItems: 10 } }, required: ['names'] },
+    inputSchema: { type: 'object', properties: { city: { type: 'string', default: 'bangalore' }, mode: { type: 'string', enum: ['rent', 'buy'], default: 'rent' }, names: { type: 'array', items: { type: 'string' }, maxItems: 10 } }, required: ['names'] },
   },
 ];
 
@@ -92,7 +92,7 @@ function inLocality(s, wanted) {
 
 function criteria(args) {
   return {
-    ...structuredClone(DEFAULT_CRITERIA), mode: args.mode || 'buy', bhk: args.bhk || [],
+    ...structuredClone(DEFAULT_CRITERIA), mode: args.mode || 'rent', bhk: args.bhk || [],
     kinds: args.types?.includes('any') ? [] : args.types || ['apartment'], q: args.name_contains || '',
     room: args.min_bedroom_ft ? { a: args.min_bedroom_ft[0], b: args.min_bedroom_ft[1] } : null, roomArea: args.min_bedroom_sqft || null,
     minSqft: args.min_home_sqft || 0, maxSqft: args.max_home_sqft || null,
@@ -222,7 +222,7 @@ function detail(s, extra) {
 }
 
 async function callTool(name, args, env, origin) {
-  const id = args.city || 'gurgaon';
+  const id = args.city || 'bangalore';
   const data = await city(env, origin, id);
   if (name === 'search_societies' || name === 'breakdown') {
     const crit = criteria(args);
@@ -278,7 +278,7 @@ async function callTool(name, args, env, origin) {
     return s ? detail(s, await details(env, origin, id, s.id)) : { error: `No society found for "${args.name}"` };
   }
   if (name === 'compare_societies') {
-    const crit = { ...structuredClone(DEFAULT_CRITERIA), mode: args.mode || 'buy' };
+    const crit = { ...structuredClone(DEFAULT_CRITERIA), mode: args.mode || 'rent' };
     return { societies: (args.names || []).slice(0, 10).map((n) => { const s = find(n); return s ? summary(s, s.verified ? 'verified' : 'portal data', crit, null, true) : { name: n, error: 'not found' }; }) };
   }
   throw new Error(`Unknown tool ${name}`);
@@ -288,7 +288,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 
 export async function onRequest({ request, env }) {
   if (request.method === 'OPTIONS') return new Response(null, { headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, GET, OPTIONS' } });
-  if (request.method === 'GET') return json({ name: 'Flat Finder', mcp: 'POST JSON-RPC here', tools: TOOLS.map((t) => t.name) });
+  if (request.method === 'GET') return json({ name: 'RentVent', mcp: 'POST JSON-RPC here', tools: TOOLS.map((t) => t.name) });
   const origin = new URL(request.url).origin;
   const msg = await request.json().catch(() => null);
   if (!msg) return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400);
@@ -297,8 +297,8 @@ export async function onRequest({ request, env }) {
     switch (msg.method) {
       case 'initialize':
         return reply({ protocolVersion: msg.params?.protocolVersion || PROTOCOL, capabilities: { tools: {} },
-          serverInfo: { name: 'flat-finder', version: '0.2.0' },
-          instructions: 'Search Indian housing societies by sector, real bedroom sizes, buy or rent budget, amenities and what is nearby. search_societies lists every match (paginate with offset, up to 200 per call); breakdown groups them by locality, BHK, amenity, metro distance or rent/price band; list_localities gives exact sector names. Always say which results are verified, likely or estimated, and share the Flat Finder link for each society.' });
+          serverInfo: { name: 'rentvent', version: '0.2.0' },
+          instructions: 'Search Indian housing societies (default: Bengaluru, rent-first) by locality, real bedroom sizes, rent or buy budget, amenities and what is nearby. search_societies lists every match (paginate with offset, up to 200 per call); breakdown groups them by locality, BHK, amenity, metro distance or rent/price band; list_localities gives exact locality names. Always say which results are verified, likely or estimated, and share the RentVent link for each society.' });
       case 'notifications/initialized':
         return new Response(null, { status: 202 });
       case 'ping':

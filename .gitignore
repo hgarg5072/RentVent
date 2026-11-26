@@ -3,6 +3,7 @@ pipeline/cache_*.log
 pipeline/out/*/osm_buildings.geojson
 node_modules/
 web/dist/
+web/.wrangler/
 .DS_Store
 __pycache__/
 .pytest_cache/
