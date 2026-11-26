@@ -388,3 +388,43 @@ body.picking-pin #map { cursor: crosshair !important; }
   .card.split .card-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
   .card.split .card-col-commute { position: sticky; top: 0; }
 }
+
+/* Bottom CommuteIQ Dock + Auto-Tuck Pills for unobstructed map */
+.card.tucked { transform: translateX(calc(100% + 40px)); opacity: 0; pointer-events: none; }
+.card { transition: transform .28s ease, opacity .25s ease; }
+
+.commute-dock {
+  position: absolute; z-index: 3; bottom: var(--gap);
+  left: calc(var(--panel-w) + var(--gap) * 2);
+  right: calc(var(--right-w) + var(--gap) * 2 + 56px);
+  max-height: 280px; overflow-y: auto; scrollbar-width: thin;
+  border-radius: 16px; padding: 12px 16px;
+  background: var(--glass-strong); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border: 1px solid color-mix(in srgb, #38bdf8 32%, var(--line)); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 8px;
+  transition: transform .28s ease, opacity .25s ease;
+}
+.commute-dock.tucked { transform: translateY(calc(100% + 40px)); opacity: 0; pointer-events: none; }
+.dock-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.dock-bar b { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 12px; }
+.dock-body { padding: 0; background: none; border: none; }
+@media (min-width: 1100px) {
+  .dock-body { display: grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start; }
+  .dock-body .ciq-hero { border-bottom: none; border-right: 1px solid var(--line); padding: 0 14px 0 0; }
+  .dock-body .ciq-tabs { grid-column: 1 / -1; }
+}
+@media (max-width: 1099px) {
+  .commute-dock { left: var(--gap); right: var(--gap); bottom: 64px; max-height: 44vh; }
+}
+
+.dock-pill {
+  position: absolute; z-index: 4; padding: 9px 15px; border-radius: 24px;
+  background: var(--glass-strong); color: var(--text);
+  border: 1px solid var(--accent); box-shadow: var(--shadow);
+  font-size: 12.5px; font-weight: 500; cursor: pointer; backdrop-filter: blur(12px);
+  transition: transform .15s, background .15s;
+}
+.dock-pill:hover { transform: translateY(-2px); background: color-mix(in srgb, var(--accent) 16%, var(--glass-strong)); }
+.right-pill { right: var(--gap); top: var(--gap); }
+.bottom-pill { bottom: var(--gap); left: 50%; transform: translateX(-50%); border-color: #38bdf8; }
+.bottom-pill:hover { transform: translateX(-50%) translateY(-2px); }

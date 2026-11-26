@@ -101,8 +101,14 @@ async function boot() {
     setBaseMode(map, baseMode);
     setHighlights(map, highlights);
     startPulse(map);
-    // any hand on the map stops a running tour
-    for (const ev of ['dragstart', 'wheel', 'touchstart']) map.on(ev, (e) => { if (e.originalEvent) stopTour(); });
+    // any hand on the map stops a running tour and tucks open panels into pills so the map stays unobstructed
+    for (const ev of ['dragstart', 'touchstart']) map.on(ev, (e) => {
+      if (e.originalEvent) {
+        stopTour();
+        if (selected && !mobile) tuckPanels(true);
+      }
+    });
+    map.on('wheel', (e) => { if (e.originalEvent) stopTour(); });
     for (const l of ['bld', 'site-fill', 'glow']) {
       map.on('click', l, (e) => { if (pickingPin) return; stopTour(); openSociety(e.features[0].properties.sid); });
       map.on('mouseenter', l, () => { if (!pickingPin) map.getCanvas().style.cursor = 'pointer'; });
@@ -375,22 +381,45 @@ function animateNumber(el, to) {
 }
 
 // ---------- society details (right side on desktop) ----------
+function tuckPanels(tuck) {
+  if (!selected) return;
+  const s = byId.get(selected);
+  const hasOffice = !!(commuteCfg.office1 || commuteCfg.office2);
+  $('card').classList.toggle('tucked', tuck);
+  $('commute-dock').classList.toggle('tucked', tuck);
+  $('pill-card').hidden = !tuck;
+  $('pill-card').textContent = s ? `🏠 ${s.name}` : '🏠 Listing';
+  $('pill-commute').hidden = !tuck || !hasOffice;
+  if (hasOffice && lastCommute.analysis?.legs?.length) {
+    const mins = lastCommute.analysis.legs.reduce((a, l) => a + l.am.p80Minutes + l.pm.p80Minutes, 0);
+    $('pill-commute').textContent = `🚗 ${mins}m/day · Traffic ⌃`;
+  } else {
+    $('pill-commute').textContent = '🚗 CommuteIQ Traffic ⌃';
+  }
+}
+
 function openSociety(sid, { fly = true } = {}) {
   const s = byId.get(sid);
   if (!s) return;
   if (map) setSelected(map, sid, selected);
   selected = sid;
   if (fly && map) map.flyTo({ center: [s.lng, s.lat], zoom: mobile ? 15.4 : 16.2, pitch: is3d ? 55 : 0, bearing: 0, duration: 2600, essential: true,
-    offset: mobile ? [0, -80] : [-180, 0] });
+    offset: mobile ? [0, -80] : [-120, -40] });
   document.body.classList.add('has-card');
   if (mobile) showMobile('society');
   renderCard(s);
+  tuckPanels(false);
   refreshCommuteCard(s);
   feed.play(sid);
 }
 
 function closeCard() {
   $('card').hidden = true;
+  $('card').classList.remove('tucked');
+  $('commute-dock').hidden = true;
+  $('commute-dock').classList.remove('tucked');
+  $('pill-card').hidden = true;
+  $('pill-commute').hidden = true;
   document.body.classList.remove('has-card');
   if (mobile) showMobile('search');
   if (map && selected) setSelected(map, null, selected);
@@ -446,57 +475,66 @@ function renderCard(s) {
   const about = d?.description ? `<details><summary>About this project</summary><p class="fine">${esc(d.description)}</p></details>` : '';
   const inList = myList.includes(s.id);
   const photos = d?.images?.length ? `<div class="photos">${d.images.map((im) => `<a href="${esc(im.full)}" target="_blank" rel="noopener"><img src="${esc(im.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.remove()"></a>`).join('')}</div><div class="fine">Photos: Magicbricks, opens full size</div>` : '';
-  const hasOffice = !!(commuteCfg.office1 || commuteCfg.office2);
-  $('card').classList.toggle('split', hasOffice);
+  $('card').classList.remove('split');
   $('card').innerHTML = `
     <div class="card-head">
       <div><span class="badge ${st}">${STATE_LABEL[st]}</span> ${s.verified ? '<span class="badge match">checked by hand</span>' : ''}${s.ai_read ? '<span class="badge likely">AI-read plans</span>' : ''}${s.live_fetched ? '<span class="badge match">live area fetch</span>' : ''}</div>
-      <div class="row-gap"><button class="iconbtn star ${inList ? 'on' : ''}" id="c-star" title="${inList ? 'Remove from my list' : 'Add to my list'}">${inList ? '★' : '☆'}</button><button class="iconbtn" id="c-close" aria-label="Close">×</button></div>
+      <div class="row-gap"><button class="iconbtn" id="c-min" title="Minimize to show map">–</button><button class="iconbtn star ${inList ? 'on' : ''}" id="c-star" title="${inList ? 'Remove from my list' : 'Add to my list'}">${inList ? '★' : '☆'}</button><button class="iconbtn" id="c-close" aria-label="Close">×</button></div>
     </div>
+    ${photos}
     <h2>${esc(s.name)}</h2>
     <div class="meta">${esc(s.developer || '')}${s.locality ? (s.developer ? ' · ' : '') + esc(s.locality) : ''} · ${esc(s.config_text || s.kind)}${s.kind_inferred ? ' <span class="fine">(type inferred from name)</span>' : ''}${facts2 ? ' · ' + esc(facts2) : ''}</div>
+    ${score}
     <div class="meta">${s.rating ? `<span class="stars">★ ${s.rating.toFixed(1)}</span> ${s.rating_count || 0} resident ratings · ${s.review_count || 0} reviews · ` : ''}${counts}</div>
     ${s.note ? `<div class="fine">${esc(s.note)}</div>` : ''}
-    <div class="card-cols">
-      <div class="card-col card-col-listing">
-        ${photos}
-        ${score}
-        <h4>Buy and rent</h4>
-        ${priceRows ? `<table class="prices"><tr><th>Home</th><th>Buy</th><th>Rent</th></tr>${priceRows}</table>` : '<div class="fine">No price data.</div>'}
-        ${trend}
-        <h4>Bedrooms</h4>
-        ${unitRows ? `<table><tr><th>Unit</th><th>Bedrooms</th><th></th><th>Source</th></tr>${unitRows}</table>` : '<div class="fine">No unit types listed.</div>'}
-        ${nearRows ? `<h4>Nearby</h4><div class="near">${nearRows}</div>` : ''}
-        ${ratingBars ? `<h4>What residents rate</h4>${ratingBars}` : ''}${reviews}
-        ${facts || amen ? `<h4>Amenities (${s.amenities.length})</h4><div class="amen">${facts}${amen}</div>` : ''}
-        ${about}
-        <div class="links">
-          <a class="btnlink" href="${esc(s.gmaps)}" target="_blank" rel="noopener">Google Maps and reviews</a>
-          <a class="btnlink" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}" target="_blank" rel="noopener">Directions</a>
-          <a href="${esc(s.url)}" target="_blank" rel="noopener">Magicbricks page</a>
-          ${s.brochure_url ? `<a href="${esc(s.brochure_url)}" target="_blank" rel="noopener">Brochure</a>` : ''}
-          ${plans}
-          ${!s.verified ? `<a href="${esc(issue)}" target="_blank" rel="noopener">Request a room check →</a>` : ''}
-        </div>
-        <div class="fine">${s.rera_id ? 'RERA ' + esc(s.rera_id) + ' · ' : ''}${s.shape === 'osm' ? 'Buildings from OpenStreetMap' : s.shape === 'osm-site' ? 'Boundary from OpenStreetMap, towers drawn approximately' : s.shape === 'live' ? 'Live rental listing from Magicbricks' : 'Approximate shape: towers drawn from the listed tower count'}</div>
-      </div>
-      <div class="card-col card-col-commute">
-        <h4>CommuteIQ · Traffic &amp; Reliability</h4>
-        <div id="ciq-panel" class="ciq-panel"></div>
-      </div>
-    </div>`;
+    <h4>Buy and rent</h4>
+    ${priceRows ? `<table class="prices"><tr><th>Home</th><th>Buy</th><th>Rent</th></tr>${priceRows}</table>` : '<div class="fine">No price data.</div>'}
+    ${trend}
+    <h4>Bedrooms</h4>
+    ${unitRows ? `<table><tr><th>Unit</th><th>Bedrooms</th><th></th><th>Source</th></tr>${unitRows}</table>` : '<div class="fine">No unit types listed.</div>'}
+    ${nearRows ? `<h4>Nearby</h4><div class="near">${nearRows}</div>` : ''}
+    ${ratingBars ? `<h4>What residents rate</h4>${ratingBars}` : ''}${reviews}
+    ${facts || amen ? `<h4>Amenities (${s.amenities.length})</h4><div class="amen">${facts}${amen}</div>` : ''}
+    ${about}
+    <div class="links">
+      <a class="btnlink" href="${esc(s.gmaps)}" target="_blank" rel="noopener">Google Maps and reviews</a>
+      <a class="btnlink" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}" target="_blank" rel="noopener">Directions</a>
+      <a href="${esc(s.url)}" target="_blank" rel="noopener">Magicbricks page</a>
+      ${s.brochure_url ? `<a href="${esc(s.brochure_url)}" target="_blank" rel="noopener">Brochure</a>` : ''}
+      ${plans}
+      ${!s.verified ? `<a href="${esc(issue)}" target="_blank" rel="noopener">Request a room check →</a>` : ''}
+    </div>
+    <div class="fine">${s.rera_id ? 'RERA ' + esc(s.rera_id) + ' · ' : ''}${s.shape === 'osm' ? 'Buildings from OpenStreetMap' : s.shape === 'osm-site' ? 'Boundary from OpenStreetMap, towers drawn approximately' : s.shape === 'live' ? 'Live rental listing from Magicbricks' : 'Approximate shape: towers drawn from the listed tower count'}</div>`;
   $('card').hidden = false;
   $('c-close').onclick = () => { stopTour(); closeCard(); };
+  $('c-min').onclick = () => tuckPanels(true);
   $('c-star').onclick = () => { toggle(myList, s.id); saveList(); renderCard(s); renderResults(); };
   paintCommuteCard(s);
   if (!details) loadDetails().then(() => { if (selected === s.id) renderCard(s); });
 }
 
 function paintCommuteCard(s) {
-  const panel = $('ciq-panel');
-  if (!panel) return;
+  const dock = $('commute-dock');
+  if (!dock) return;
+  const hasOffice = !!(commuteCfg.office1 || commuteCfg.office2);
+  if (!hasOffice) {
+    dock.hidden = true;
+    $('pill-commute').hidden = true;
+    return;
+  }
+  dock.hidden = false;
   const state = lastCommute.sid === s.id ? lastCommute : { loading: false, error: null, analysis: null };
-  renderCommutePanel(panel, {
+  dock.innerHTML = `<div class="dock-bar">
+      <span class="k">CommuteIQ · Traffic &amp; Reliability — <b>${esc(s.name)}</b></span>
+      <button class="iconbtn" id="dock-min" title="Minimize traffic dock">⌄</button>
+    </div>
+    <div id="ciq-panel" class="ciq-panel dock-body"></div>`;
+  $('dock-min').onclick = () => {
+    dock.classList.add('tucked');
+    $('pill-commute').hidden = false;
+    $('pill-commute').textContent = '🚗 CommuteIQ Traffic ⌃';
+  };
+  renderCommutePanel($('ciq-panel'), {
     ...state,
     config: commuteCfg,
     onFocusOffice: () => {
@@ -932,6 +970,8 @@ function buildControls() {
   $('layers-btn').onclick = () => $('layers').classList.toggle('open');
   document.querySelectorAll('#layers button[data-mode]').forEach((b) => (b.onclick = () => { setBase(b.dataset.mode); $('layers').classList.remove('open'); }));
   $('btn-theme').onclick = () => setBase(baseMode === 'light' ? 'streets' : 'light');
+  $('pill-card').onclick = () => { $('card').classList.remove('tucked'); $('pill-card').hidden = true; };
+  $('pill-commute').onclick = () => { $('commute-dock').classList.remove('tucked'); $('pill-commute').hidden = true; };
   for (const k of ['glow', 'bounds', 'labels']) {
     const box = $(`hl-${k}`);
     box.checked = highlights[k];
