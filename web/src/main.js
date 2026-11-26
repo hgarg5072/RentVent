@@ -446,38 +446,45 @@ function renderCard(s) {
   const about = d?.description ? `<details><summary>About this project</summary><p class="fine">${esc(d.description)}</p></details>` : '';
   const inList = myList.includes(s.id);
   const photos = d?.images?.length ? `<div class="photos">${d.images.map((im) => `<a href="${esc(im.full)}" target="_blank" rel="noopener"><img src="${esc(im.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.remove()"></a>`).join('')}</div><div class="fine">Photos: Magicbricks, opens full size</div>` : '';
+  const hasOffice = !!(commuteCfg.office1 || commuteCfg.office2);
+  $('card').classList.toggle('split', hasOffice);
   $('card').innerHTML = `
     <div class="card-head">
-      <div><span class="badge ${st}">${STATE_LABEL[st]}</span> ${s.verified ? '<span class="badge match">checked by hand</span>' : ''}${s.ai_read ? '<span class="badge likely">AI-read plans</span>' : ''}</div>
+      <div><span class="badge ${st}">${STATE_LABEL[st]}</span> ${s.verified ? '<span class="badge match">checked by hand</span>' : ''}${s.ai_read ? '<span class="badge likely">AI-read plans</span>' : ''}${s.live_fetched ? '<span class="badge match">live area fetch</span>' : ''}</div>
       <div class="row-gap"><button class="iconbtn star ${inList ? 'on' : ''}" id="c-star" title="${inList ? 'Remove from my list' : 'Add to my list'}">${inList ? '★' : '☆'}</button><button class="iconbtn" id="c-close" aria-label="Close">×</button></div>
     </div>
-    ${photos}
     <h2>${esc(s.name)}</h2>
-    <div class="meta">${esc(s.developer || '')}${s.locality ? ' · ' + esc(s.locality) : ''} · ${esc(s.config_text || s.kind)}${s.kind_inferred ? ' <span class="fine">(type inferred from name)</span>' : ''}</div>
-    <div class="meta">${esc(facts2)}</div>
-    ${score}
+    <div class="meta">${esc(s.developer || '')}${s.locality ? (s.developer ? ' · ' : '') + esc(s.locality) : ''} · ${esc(s.config_text || s.kind)}${s.kind_inferred ? ' <span class="fine">(type inferred from name)</span>' : ''}${facts2 ? ' · ' + esc(facts2) : ''}</div>
     <div class="meta">${s.rating ? `<span class="stars">★ ${s.rating.toFixed(1)}</span> ${s.rating_count || 0} resident ratings · ${s.review_count || 0} reviews · ` : ''}${counts}</div>
     ${s.note ? `<div class="fine">${esc(s.note)}</div>` : ''}
-    <h4>CommuteIQ · Traffic &amp; Reliability</h4>
-    <div id="ciq-panel" class="ciq-panel"></div>
-    <h4>Buy and rent</h4>
-    ${priceRows ? `<table class="prices"><tr><th>Home</th><th>Buy</th><th>Rent</th></tr>${priceRows}</table>` : '<div class="fine">No price data.</div>'}
-    ${trend}
-    <h4>Bedrooms</h4>
-    ${unitRows ? `<table><tr><th>Unit</th><th>Bedrooms</th><th></th><th>Source</th></tr>${unitRows}</table>` : '<div class="fine">No unit types listed.</div>'}
-    ${nearRows ? `<h4>Nearby</h4><div class="near">${nearRows}</div>` : ''}
-    ${ratingBars ? `<h4>What residents rate</h4>${ratingBars}` : ''}${reviews}
-    ${facts || amen ? `<h4>Amenities (${s.amenities.length})</h4><div class="amen">${facts}${amen}</div>` : ''}
-    ${about}
-    <div class="links">
-      <a class="btnlink" href="${esc(s.gmaps)}" target="_blank" rel="noopener">Google Maps and reviews</a>
-      <a class="btnlink" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}" target="_blank" rel="noopener">Directions</a>
-      <a href="${esc(s.url)}" target="_blank" rel="noopener">Magicbricks page</a>
-      ${s.brochure_url ? `<a href="${esc(s.brochure_url)}" target="_blank" rel="noopener">Brochure</a>` : ''}
-      ${plans}
-      ${!s.verified ? `<a href="${esc(issue)}" target="_blank" rel="noopener">Request a room check →</a>` : ''}
-    </div>
-    <div class="fine">${s.rera_id ? 'RERA ' + esc(s.rera_id) + ' · ' : ''}${s.shape === 'osm' ? 'Buildings from OpenStreetMap' : s.shape === 'osm-site' ? 'Boundary from OpenStreetMap, towers drawn approximately' : 'Approximate shape: towers drawn from the listed tower count'}</div>`;
+    <div class="card-cols">
+      <div class="card-col card-col-listing">
+        ${photos}
+        ${score}
+        <h4>Buy and rent</h4>
+        ${priceRows ? `<table class="prices"><tr><th>Home</th><th>Buy</th><th>Rent</th></tr>${priceRows}</table>` : '<div class="fine">No price data.</div>'}
+        ${trend}
+        <h4>Bedrooms</h4>
+        ${unitRows ? `<table><tr><th>Unit</th><th>Bedrooms</th><th></th><th>Source</th></tr>${unitRows}</table>` : '<div class="fine">No unit types listed.</div>'}
+        ${nearRows ? `<h4>Nearby</h4><div class="near">${nearRows}</div>` : ''}
+        ${ratingBars ? `<h4>What residents rate</h4>${ratingBars}` : ''}${reviews}
+        ${facts || amen ? `<h4>Amenities (${s.amenities.length})</h4><div class="amen">${facts}${amen}</div>` : ''}
+        ${about}
+        <div class="links">
+          <a class="btnlink" href="${esc(s.gmaps)}" target="_blank" rel="noopener">Google Maps and reviews</a>
+          <a class="btnlink" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}" target="_blank" rel="noopener">Directions</a>
+          <a href="${esc(s.url)}" target="_blank" rel="noopener">Magicbricks page</a>
+          ${s.brochure_url ? `<a href="${esc(s.brochure_url)}" target="_blank" rel="noopener">Brochure</a>` : ''}
+          ${plans}
+          ${!s.verified ? `<a href="${esc(issue)}" target="_blank" rel="noopener">Request a room check →</a>` : ''}
+        </div>
+        <div class="fine">${s.rera_id ? 'RERA ' + esc(s.rera_id) + ' · ' : ''}${s.shape === 'osm' ? 'Buildings from OpenStreetMap' : s.shape === 'osm-site' ? 'Boundary from OpenStreetMap, towers drawn approximately' : s.shape === 'live' ? 'Live rental listing from Magicbricks' : 'Approximate shape: towers drawn from the listed tower count'}</div>
+      </div>
+      <div class="card-col card-col-commute">
+        <h4>CommuteIQ · Traffic &amp; Reliability</h4>
+        <div id="ciq-panel" class="ciq-panel"></div>
+      </div>
+    </div>`;
   $('card').hidden = false;
   $('c-close').onclick = () => { stopTour(); closeCard(); };
   $('c-star').onclick = () => { toggle(myList, s.id); saveList(); renderCard(s); renderResults(); };
@@ -678,7 +685,7 @@ function buildPin() {
     if (map) setOfficePins(map, commuteCfg.office1, commuteCfg.office2);
     buildCommute();
     renderResults();
-    if (selected && byId.get(selected)) refreshCommuteCard(byId.get(selected));
+    if (selected && byId.get(selected)) { renderCard(byId.get(selected)); refreshCommuteCard(byId.get(selected)); }
   };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pickingPin) setPinPicking(false); });
   renderPinControls();
@@ -690,7 +697,7 @@ function buildCommute() {
     if (map) setOfficePins(map, commuteCfg.office1, commuteCfg.office2);
     renderCommuteControls();
     renderResults();
-    if (selected && byId.get(selected)) refreshCommuteCard(byId.get(selected));
+    if (selected && byId.get(selected)) { renderCard(byId.get(selected)); refreshCommuteCard(byId.get(selected)); }
   };
 
   const wireOffice = (slot, inputId, resId, pillId, hubsId) => {
@@ -776,7 +783,7 @@ function buildCommute() {
     const next = prompt('Optional custom TomTom API key (leave blank to use RentVent server key):', cur);
     if (next !== null) {
       setCustomTomTomKey(next);
-      if (selected && byId.get(selected)) refreshCommuteCard(byId.get(selected));
+      if (selected && byId.get(selected)) { renderCard(byId.get(selected)); refreshCommuteCard(byId.get(selected)); }
     }
   };
   renderCommuteControls();

@@ -379,3 +379,12 @@ body.picking-pin #map { cursor: crosshair !important; }
 .ciq-leg-pill b { font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .ciq-alts-det { margin-top: 6px; font-size: 11.5px; }
 .ciq-alts-det summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+
+/* Side-by-side society details + CommuteIQ drawer on desktop */
+.card-cols { display: flex; flex-direction: column; gap: 12px; }
+.card-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (min-width: 1120px) {
+  .card.split { width: min(790px, calc(100vw - var(--panel-w) - var(--gap) * 3)); bottom: var(--gap); }
+  .card.split .card-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .card.split .card-col-commute { position: sticky; top: 0; }
+}
