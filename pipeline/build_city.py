@@ -424,6 +424,24 @@ def main(city="gurgaon"):
             pricing.add_estimates(s, model, {b: statistics.median(v) for b, v in sizes.items()}, psf)
         s["prices"] = {str(b): v for b, v in sorted(s["prices"].items())}
 
+    # Persist & merge historical asking-rent snapshots so past asking rents remain visible even when live listings go offline.
+    import datetime
+    hist_dir = ROOT.parent / "data" / "rent_history"
+    hist_dir.mkdir(parents=True, exist_ok=True)
+    hist_path = hist_dir / f"{city}.json"
+    hist = json.loads(hist_path.read_text()) if hist_path.exists() else {}
+    today = datetime.date.today().isoformat()
+    for s in societies:
+        sh = hist.setdefault(s["id"], {})
+        for bhk, p in s["prices"].items():
+            if p.get("rent") and "rent" not in p.get("flags", {}):
+                sh[bhk] = {"value": p["rent"]["median"], "date": today, "n": p["rent"]["n"]}
+            elif bhk in sh and not p.get("rent"):
+                p["rent_last_seen"] = sh[bhk]
+        if not sh:
+            hist.pop(s["id"], None)
+    hist_path.write_text(json.dumps(hist, separators=(",", ":")))
+
     for i, s in enumerate(societies):
         area = match_area(s, area_grid)
         if area and area["properties"]["osm"] in used_areas:

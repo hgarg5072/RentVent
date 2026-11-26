@@ -4,7 +4,7 @@ import { addBaseLayers, addCommuteLayers, addSocietyLayers, BASE_MODES, createMa
 import { searchSocieties } from './search.js';
 import { createFeed } from './feed.js';
 import { AMENITY_KEYS, DEFAULT_CRITERIA, NEAR, RANK, feetLabel, formatINR, matchSociety, matchUnit, priceFor, roomPasses } from './filters.js';
-import { BLR_HUBS, analyzeSocietyCommute, buildRoutesGeoJSON, geocodeOffice, getCustomTomTomKey, haversineKm, officeScoreKm, setCustomTomTomKey } from './commute.js';
+import { BLR_HUBS, analyzeSocietyCommute, buildRoutesGeoJSON, geocodeOffice, getCustomTomTomKey, haversineKm, matchLocalPlaces, officeScoreKm, setCustomTomTomKey } from './commute.js';
 import { renderCommutePanel } from './commuteUi.js';
 
 const $ = (id) => document.getElementById(id);
@@ -414,11 +414,12 @@ function renderCard(s) {
     const vl = { unknown: 'unread', probable: 'probably' }[v] || v;
     return `<tr><td>${esc(u.label)}<div class="fine">${size ? size + ' sq ft' : ''}</div></td><td>${roomText}</td><td>${v ? `<span class="badge ${v}">${vl}</span>` : ''}</td><td>${src}</td></tr>`;
   }).join('');
-  const cell = (real, est, rent, flag, rangeFlag) => real
+  const cell = (real, est, rent, flag, rangeFlag, lastSeen) => real
     ? `<b${flag ? ` class="flagged" title="${esc(flag)}"` : ''}>${formatINR(real.median)}${rent ? '/mo' : ''}${flag ? ' ⚠' : ''}</b><div class="fine">${real.n > 1 ? `${formatINR(real.min)} to ${formatINR(real.max)} · ` : ''}${real.n} listing${real.n > 1 ? 's' : ''}${rangeFlag ? ` · <span title="${esc(rangeFlag)}">⚠ odd listings</span>` : ''}</div>${flag ? `<div class="fine flag-note">⚠ Our check: ${esc(flag)}.${est ? ` Our estimate: ~${formatINR(est.value)}${rent ? '/mo' : ''}.` : ''}</div>` : ''}`
-    : est ? `<b class="est" title="${esc(est.basis)}">~${formatINR(est.value)}${rent ? '/mo' : ''}</b><div class="fine">our estimate: ${esc(est.basis)}</div>` : '<span class="fine">no data</span>';
+    : lastSeen ? `<b class="est">~${formatINR(lastSeen.value)}/mo</b><div class="fine">last seen asking rent (${esc(lastSeen.date)}${lastSeen.n ? ` · ${lastSeen.n} listing${lastSeen.n > 1 ? 's' : ''}` : ''})</div>`
+      : est ? `<b class="est" title="${esc(est.basis)}">~${formatINR(est.value)}${rent ? '/mo' : ''}</b><div class="fine">our estimate: ${esc(est.basis)}</div>` : '<span class="fine">no data</span>';
   const priceRows = Object.entries(s.prices || {}).filter(([b]) => !crit.bhk.length || crit.bhk.includes(+b)).map(([b, p]) =>
-    `<tr><td>${b} BHK${p.psf ? `<div class="fine">₹${p.psf.toLocaleString()}/sq ft</div>` : ''}</td><td>${cell(p.buy, p.buy_est, false, p.flags?.buy, p.flags?.buy_range)}</td><td>${cell(p.rent, p.rent_est, true, p.flags?.rent, p.flags?.rent_range)}</td></tr>`).join('');
+    `<tr><td>${b} BHK${p.psf ? `<div class="fine">₹${p.psf.toLocaleString()}/sq ft</div>` : ''}</td><td>${cell(p.buy, p.buy_est, false, p.flags?.buy, p.flags?.buy_range)}</td><td>${cell(p.rent, p.rent_est, true, p.flags?.rent, p.flags?.rent_range, p.rent_last_seen)}</td></tr>`).join('');
   const d = details?.[s.id];
   const want = new Set(crit.amenities.flatMap((k) => AMENITY_KEYS[k] || [k.slice(2)]));
   const facts = Object.entries(s.amen_facts || {}).map(([k, f]) => `<span class="hit">${esc(AMEN_LABELS[k] || k)}: ${esc(f.value)} (<a href="${esc(f.source)}" target="_blank" rel="noopener">p.${esc(f.page)}</a>)</span>`).join('');
@@ -452,11 +453,11 @@ function renderCard(s) {
     ${score}
     <div class="meta">${s.rating ? `<span class="stars">★ ${s.rating.toFixed(1)}</span> ${s.rating_count || 0} resident ratings · ${s.review_count || 0} reviews · ` : ''}${counts}</div>
     ${s.note ? `<div class="fine">${esc(s.note)}</div>` : ''}
+    <h4>CommuteIQ · Traffic &amp; Reliability</h4>
+    <div id="ciq-panel" class="ciq-panel"></div>
     <h4>Buy and rent</h4>
     ${priceRows ? `<table class="prices"><tr><th>Home</th><th>Buy</th><th>Rent</th></tr>${priceRows}</table>` : '<div class="fine">No price data.</div>'}
     ${trend}
-    <h4>CommuteIQ · Traffic &amp; Reliability</h4>
-    <div id="ciq-panel" class="ciq-panel"></div>
     <h4>Bedrooms</h4>
     ${unitRows ? `<table><tr><th>Unit</th><th>Bedrooms</th><th></th><th>Source</th></tr>${unitRows}</table>` : '<div class="fine">No unit types listed.</div>'}
     ${nearRows ? `<h4>Nearby</h4><div class="near">${nearRows}</div>` : ''}
@@ -652,9 +653,6 @@ function buildCommute() {
     $('commute-opts').hidden = !hasAny;
     $('off2-wrap').hidden = !$('off2-wrap').dataset.open && !commuteCfg.office2;
     $('btn-add-off2').textContent = $('off2-wrap').hidden ? '+ Add 2nd office (dual-office)' : 'Hide 2nd office';
-    $('off-bias-wrap').hidden = !(commuteCfg.office1 && commuteCfg.office2);
-    $('f-bias').value = commuteCfg.bias;
-    $('v-bias').textContent = `${100 - commuteCfg.bias}% O1 / ${commuteCfg.bias}% O2`;
     $('c-am').value = commuteCfg.amTime || '08:30';
     $('c-pm').value = commuteCfg.pmTime || '17:30';
     document.querySelectorAll('#c-pct button').forEach((b) => b.classList.toggle('on', +b.dataset.p === commuteCfg.percentile));
@@ -670,7 +668,6 @@ function buildCommute() {
     $('off2-wrap').hidden = !open;
     renderCommuteControls();
   };
-  $('f-bias').oninput = () => { commuteCfg.bias = +$('f-bias').value; $('v-bias').textContent = `${100 - commuteCfg.bias}% O1 / ${commuteCfg.bias}% O2`; store.set('rv-commute', commuteCfg); renderResults(); };
   $('c-am').onchange = () => { commuteCfg.amTime = $('c-am').value || '08:30'; saveCommute(); };
   $('c-pm').onchange = () => { commuteCfg.pmTime = $('c-pm').value || '17:30'; saveCommute(); };
   document.querySelectorAll('#c-pct button').forEach((b) => {
@@ -848,18 +845,19 @@ function buildControls() {
 function buildOnboarding() {
   const c = data.counts;
   const steps = [
-    ['Every society in ' + data.city.name + ', on one map', `${c.on_map.toLocaleString()} housing societies, ${(c.for_sale || 0).toLocaleString()} homes for sale and ${(c.for_rent || 0).toLocaleString()} for rent. Each one has its prices, rents, resident ratings, what is nearby, and links to Google Maps.`],
-    ['Start with what you cannot live without', 'Pick Buy or Rent and your budget. Then set the smallest bedroom you can live with, by both sides or by area in gaj or sq ft. Add amenities and what you want nearby, like a park within 500 m.'],
+    ['Every society in ' + data.city.name + ', on one map', `${c.on_map.toLocaleString()} housing societies, ${(c.for_rent || 0).toLocaleString()} live rentals and ${(c.for_sale || 0).toLocaleString()} homes for sale. Each card has live asking rents, historical rent snapshots, resident ratings, nearby metro/parks, and Google Maps links.`],
+    ['Filter by rent, rooms & map radius', 'Start with Rent or Buy, BHK, budget, amenities, or smallest bedroom size. Click <b>📍 Pin radius</b> (or right-click anywhere on the map) to show only societies within 5 km, 10 km, or any custom distance.'],
+    ['CommuteIQ · Live Traffic & Reliability', 'Enter 1 or 2 office locations (e.g. Broadcom, Qualcomm, Bagmane, Whitefield) in the sidebar. Click any apartment to see big AM/PM daily commute times, live TomTom route overlays on the map, hourly congestion bars (6 AM–10 PM), Mon–Sun traffic heatmap, and 50%/80%/95% arrival confidence.'],
     ['How to read the map', '<span class="lg match"></span> Verified: every bedroom read from builder plans and passes.<br><span class="lg likely"></span> Likely: the rooms read so far pass.<br><span class="lg probable"></span> Probably fits: plans not read yet, estimated from unit size.<br><span class="lg unknown"></span> Not checked yet: no room data, so neither pass nor fail.'],
-    ['Open a society, keep a list', 'Click any building for prices, bedrooms, ratings and the research behind every number. Star the ones you like, or paste a list of names you already have. Export your results as a CSV any time.'],
+    ['Shortlist, compare & export', 'Click any building for full traffic, rent, and room breakdowns. Star your favourites into My List, share the link, or export filtered societies as a CSV anytime.'],
   ];
   let i = 0;
   const show = () => {
     $('ob-steps').innerHTML = steps.map((_, j) => `<i class="${j === i ? 'on' : ''}"></i>`).join('');
-    $('ob-body').innerHTML = `<h3>${steps[i][0]}</h3><p>${steps[i][1]}</p>${i === 1 ? '<button class="preset" id="ob-divy">Try an example search</button>' : ''}`;
+    $('ob-body').innerHTML = `<h3>${steps[i][0]}</h3><p>${steps[i][1]}</p>${i === 1 ? '<button class="preset" id="ob-divy">Try BLR 2–3 BHK &lt; ₹60k</button>' : ''}`;
     $('ob-back').hidden = i === 0;
     $('ob-next').textContent = i === steps.length - 1 ? 'Start exploring' : 'Next';
-    $('ob-divy')?.addEventListener('click', () => { useCriteria(DIVY); done(); });
+    $('ob-divy')?.addEventListener('click', () => { useCriteria(BLR_RENT); done(); });
   };
   const done = () => { $('onboard').hidden = true; store.set('ff-onboarded', true); };
   $('ob-next').onclick = () => (i === steps.length - 1 ? done() : (i++, show()));
@@ -875,14 +873,38 @@ function buildSearch() {
   let items = [], active = -1;
   const close = () => { list.hidden = true; active = -1; };
   const render = () => {
-    const all = searchSocieties(data.societies, input.value, 400);
+    const q = input.value.trim();
+    const all = searchSocieties(data.societies, q, 400);
+    const areas = cityId === 'bangalore' && q.length >= 2 ? matchLocalPlaces(q).slice(0, 3) : [];
     items = all.slice(0, 8);
-    if (!items.length) {
-      list.innerHTML = input.value.trim() ? '<li class="empty">No society by that name</li>' : '';
-      list.hidden = !input.value.trim();
+    if (!items.length && !areas.length) {
+      list.innerHTML = q ? '<li class="empty">No society or area by that name</li>' : '';
+      list.hidden = !q;
       return;
     }
-    const rows = items.map((s, i) => {
+    const rows = [];
+    for (const a of areas) {
+      const li = document.createElement('li');
+      li.className = 'showall';
+      li.innerHTML = `<span>📍 Explore <b>${esc(a.name)}</b> (5 km radius)</span><span class="tag">${esc(a.address.split(',')[0])}</span>`;
+      li.onmousedown = (e) => {
+        e.preventDefault();
+        pinRadiusKm = 5;
+        dropSearchPin(a.lat, a.lng);
+        input.value = a.name;
+        close();
+        input.blur();
+      };
+      rows.push(li);
+    }
+    if (all.length > 1) {
+      const li = document.createElement('li');
+      li.className = 'showall';
+      li.innerHTML = `<span>Show all ${all.length} matching "${esc(q)}" on the map</span>`;
+      li.onmousedown = (e) => { e.preventDefault(); setQuery(q); close(); input.blur(); };
+      rows.push(li);
+    }
+    rows.push(...items.map((s, i) => {
       const li = document.createElement('li');
       li.className = i === active ? 'on' : '';
       li.innerHTML = `<span>${esc(s.name)}</span><span class="tag ${states.get(s.id)}">${esc(s.locality || '')}${s.verified ? ' · verified' : ''}</span><button class="iconbtn star ${myList.includes(s.id) ? 'on' : ''}" title="Add to my list">${myList.includes(s.id) ? '★' : '☆'}</button>`;
@@ -892,14 +914,7 @@ function buildSearch() {
         pick(s);
       };
       return li;
-    });
-    if (all.length > 1) {
-      const li = document.createElement('li');
-      li.className = 'showall';
-      li.innerHTML = `<span>Show all ${all.length} matching "${esc(input.value.trim())}" on the map</span>`;
-      li.onmousedown = (e) => { e.preventDefault(); setQuery(input.value.trim()); close(); input.blur(); };
-      rows.unshift(li);
-    }
+    }));
     list.replaceChildren(...rows);
     list.hidden = false;
   };

@@ -72,3 +72,13 @@ describe('arrival confidence & household summary', () => {
     expect(favor2).toBeCloseTo(haversineKm(soc, o2), 4);
   });
 });
+
+import { matchLocalPlaces } from './commute.js';
+
+describe('local Bengaluru office & area directory', () => {
+  it('instantly finds Broadcom, Qualcomm, and Bellandur', () => {
+    expect(matchLocalPlaces('broadcom').length).toBeGreaterThan(0);
+    expect(matchLocalPlaces('qualcomm').length).toBeGreaterThan(0);
+    expect(matchLocalPlaces('bellandur').length).toBeGreaterThan(0);
+  });
+});

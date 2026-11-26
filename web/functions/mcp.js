@@ -135,7 +135,8 @@ function perBhk(s, bhk) {
     const p = s.prices?.[b] || {};
     const price = (m) => {
       const est = p[`${m}_est`]?.value ? { estimate: p[`${m}_est`].value } : null;
-      if (p[m]?.median == null) return est;
+      const lastSeen = m === 'rent' && p.rent_last_seen ? { last_seen: p.rent_last_seen } : null;
+      if (p[m]?.median == null) return lastSeen ? { ...lastSeen, ...(est || {}) } : est;
       const real = { median: p[m].median, range: [p[m].min, p[m].max], listings: p[m].n, ...(p[m].n === 1 && { thin: 'only 1 listing' }), ...(p.flags?.[`${m}_range`] && { range_warning: p.flags[`${m}_range`] }) };
       return p.flags?.[m] ? { listed: real, flag: `Flat Finder check: ${p.flags[m]}. Not used for filtering.`, ...est } : real;
     };

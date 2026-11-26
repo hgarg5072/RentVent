@@ -16,12 +16,69 @@ export const DAY_CONGESTION_FACTORS = {
 
 export const BLR_HUBS = [
   { id: 'google_ananta', name: 'Google Ananta (Bagmane ORR)', short: 'Bagmane / ORR', lat: 12.9826, lng: 77.6916 },
-  { id: 'ecity_broadcom', name: 'Electronic City Phase 1', short: 'Electronic City', lat: 12.8378, lng: 77.6546 },
+  { id: 'ecity_broadcom', name: 'Broadcom / Electronic City Ph 1', short: 'Electronic City', lat: 12.8378, lng: 77.6546 },
   { id: 'whitefield_itpb', name: 'Whitefield (ITPL / ITPB)', short: 'Whitefield ITPL', lat: 12.9855, lng: 77.7364 },
   { id: 'bellandur_ecoworld', name: 'Bellandur (RMZ Ecoworld)', short: 'Ecoworld ORR', lat: 12.9212, lng: 77.6815 },
   { id: 'manyata', name: 'Manyata Tech Park (Hebbal)', short: 'Manyata Hebbal', lat: 13.0458, lng: 77.6203 },
   { id: 'koramangala', name: 'Koramangala / Sony Signal', short: 'Koramangala', lat: 12.9352, lng: 77.6245 },
 ];
+
+// Fast local directory of Bengaluru tech offices, parks & neighbourhoods so common searches never miss.
+export const BLR_PLACES = [
+  // Major tech companies & campuses
+  { name: 'Broadcom (Electronic City Phase 1)', address: 'Electronic City Phase 1, Bengaluru', kind: 'office', lat: 12.8378, lng: 77.6546 },
+  { name: 'Broadcom (Sarjapur / ORR)', address: 'Outer Ring Road, Bellandur, Bengaluru', kind: 'office', lat: 12.9255, lng: 77.6810 },
+  { name: 'Qualcomm India (Whitefield EPIP)', address: 'EPIP Zone, Whitefield, Bengaluru', kind: 'office', lat: 12.9784, lng: 77.7266 },
+  { name: 'Qualcomm India (Bagmane / ORR)', address: 'Mahadevapura, ORR, Bengaluru', kind: 'office', lat: 12.9815, lng: 77.6945 },
+  { name: 'Google Ananta (Bagmane Tech Park)', address: 'Mahadevapura, ORR, Bengaluru', kind: 'office', lat: 12.9826, lng: 77.6916 },
+  { name: 'Google RMZ Infinity (Old Madras Rd)', address: 'Bennigana Halli, Bengaluru', kind: 'office', lat: 12.9936, lng: 77.6606 },
+  { name: 'Amazon (Bagmane Constellation ORR)', address: 'Doddanekundi, Mahadevapura, Bengaluru', kind: 'office', lat: 12.9794, lng: 77.6966 },
+  { name: 'Amazon (World Trade Center / Orion)', address: 'Rajajinagar, Bengaluru', kind: 'office', lat: 13.0117, lng: 77.5549 },
+  { name: 'Microsoft (Bellandur / Ferns)', address: 'Outer Ring Road, Bellandur, Bengaluru', kind: 'office', lat: 12.9261, lng: 77.6762 },
+  { name: 'Microsoft (Bagmane Vigyan)', address: 'CV Raman Nagar, Bengaluru', kind: 'office', lat: 12.9841, lng: 77.6617 },
+  { name: 'Goldman Sachs (Crystal Downs ORR)', address: 'Outer Ring Road, Kadubeesanahalli, Bengaluru', kind: 'office', lat: 12.9344, lng: 77.6922 },
+  { name: 'Flipkart (Embassy TechVillage)', address: 'Devarabisanahalli, ORR, Bengaluru', kind: 'office', lat: 12.9288, lng: 77.6897 },
+  { name: 'Cisco Systems (Cessna Business Park)', address: 'Kadubeesanahalli, ORR, Bengaluru', kind: 'office', lat: 12.9367, lng: 77.6952 },
+  { name: 'Intel (Ecospace / Devarabisanahalli)', address: 'Outer Ring Road, Bellandur, Bengaluru', kind: 'office', lat: 12.9267, lng: 77.6826 },
+  { name: 'SAP Labs India (Whitefield)', address: 'EPIP Zone, Whitefield, Bengaluru', kind: 'office', lat: 12.9781, lng: 77.7155 },
+  { name: 'Infosys Campus (Electronic City)', address: 'Hosur Road, Electronic City, Bengaluru', kind: 'office', lat: 12.8498, lng: 77.6631 },
+  { name: 'Wipro Corporate Office (Sarjapur Rd)', address: 'Doddakannelli, Sarjapur Road, Bengaluru', kind: 'office', lat: 12.9102, lng: 77.6852 },
+  { name: 'RMZ Ecoworld (Bellandur)', address: 'Outer Ring Road, Bellandur, Bengaluru', kind: 'office', lat: 12.9212, lng: 77.6815 },
+  { name: 'Prestige Tech Park (Kadubeesanahalli)', address: 'Outer Ring Road, Marathahalli, Bengaluru', kind: 'office', lat: 12.9428, lng: 77.6968 },
+  { name: 'Manyata Tech Park (Hebbal)', address: 'Nagawara, Outer Ring Road, Bengaluru', kind: 'office', lat: 13.0458, lng: 77.6203 },
+  { name: 'ITPL / ITPB (Whitefield)', address: 'Whitefield Main Road, Bengaluru', kind: 'office', lat: 12.9855, lng: 77.7364 },
+  // Popular Bengaluru neighbourhoods / areas
+  { name: 'Bellandur', address: 'Outer Ring Road, Bengaluru', kind: 'area', lat: 12.9259, lng: 77.6762 },
+  { name: 'HSR Layout', address: 'South-East Bengaluru', kind: 'area', lat: 12.9121, lng: 77.6446 },
+  { name: 'Indiranagar', address: 'Central-East Bengaluru', kind: 'area', lat: 12.9784, lng: 77.6408 },
+  { name: 'Koramangala', address: 'South-East Bengaluru', kind: 'area', lat: 12.9352, lng: 77.6245 },
+  { name: 'Whitefield', address: 'East Bengaluru', kind: 'area', lat: 12.9698, lng: 77.7500 },
+  { name: 'Marathahalli', address: 'Outer Ring Road, East Bengaluru', kind: 'area', lat: 12.9591, lng: 77.6974 },
+  { name: 'Sarjapur Road', address: 'South-East Bengaluru', kind: 'area', lat: 12.9081, lng: 77.6858 },
+  { name: 'Electronic City', address: 'Hosur Road, South Bengaluru', kind: 'area', lat: 12.8452, lng: 77.6602 },
+  { name: 'Kadubeesanahalli', address: 'Outer Ring Road, Bengaluru', kind: 'area', lat: 12.9378, lng: 77.6952 },
+  { name: 'Haralur Road', address: 'Off Sarjapur Road, Bengaluru', kind: 'area', lat: 12.9012, lng: 77.6578 },
+  { name: 'Mahadevapura', address: 'Outer Ring Road, Bengaluru', kind: 'area', lat: 12.9896, lng: 77.6915 },
+  { name: 'Brookefield', address: 'ITPL / Kundalahalli, Bengaluru', kind: 'area', lat: 12.9655, lng: 77.7176 },
+  { name: 'BTM Layout', address: 'South Bengaluru', kind: 'area', lat: 12.9166, lng: 77.6101 },
+  { name: 'JP Nagar', address: 'South Bengaluru', kind: 'area', lat: 12.9063, lng: 77.5857 },
+  { name: 'Jayanagar', address: 'South Bengaluru', kind: 'area', lat: 12.9308, lng: 77.5838 },
+  { name: 'Hebbal', address: 'North Bengaluru', kind: 'area', lat: 13.0358, lng: 77.5970 },
+  { name: 'Yelahanka', address: 'North Bengaluru', kind: 'area', lat: 13.1007, lng: 77.5963 },
+  { name: 'Bannerghatta Road', address: 'South Bengaluru', kind: 'area', lat: 12.8891, lng: 77.5968 },
+  { name: 'Kanakapura Road', address: 'South Bengaluru', kind: 'area', lat: 12.8855, lng: 77.5528 },
+  { name: 'KR Puram / Hoodi', address: 'East Bengaluru', kind: 'area', lat: 12.9990, lng: 77.7050 },
+];
+
+export function matchLocalPlaces(query, kind = null) {
+  const words = String(query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return BLR_PLACES.filter((p) => {
+    if (kind && p.kind !== kind) return false;
+    const hay = `${p.name} ${p.address}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+}
 
 const KEY_STORAGE = 'rentvent_tomtom_key';
 const memCache = new Map();
@@ -204,22 +261,64 @@ async function tomtomFetch(pathAndQuery) {
 }
 
 export async function geocodeOffice(query, center = { lat: 12.9716, lng: 77.5946 }) {
-  const q = encodeURIComponent(query.trim());
-  if (!q) return [];
+  const raw = String(query || '').trim();
+  if (!raw) return [];
+
+  // 1. Instant local Bengaluru tech-office & neighbourhood matches
+  const merged = [];
+  const addUnique = (item) => {
+    if (!item || item.lat == null || item.lng == null) return;
+    if (merged.some((m) => haversineKm(m, item) < 0.25 && m.name.toLowerCase() === item.name.toLowerCase())) return;
+    merged.push(item);
+  };
+  for (const p of matchLocalPlaces(raw).slice(0, 4)) addUnique(p);
+
+  // 2. TomTom Search with typeahead=true
+  const q = encodeURIComponent(raw);
   const qs = new URLSearchParams({
     limit: '6',
     countrySet: 'IN',
     lat: String(center.lat),
     lon: String(center.lng),
     radius: '50000',
+    typeahead: 'true',
   });
-  const data = await tomtomFetch(`search/2/search/${q}.json?${qs.toString()}`);
-  return (data.results || []).map((r) => ({
-    name: r.poi?.name || r.address?.freeformAddress || query,
-    address: r.address?.freeformAddress || '',
-    lat: r.position.lat,
-    lng: r.position.lon,
-  }));
+  try {
+    const data = await tomtomFetch(`search/2/search/${q}.json?${qs.toString()}`);
+    for (const r of data.results || []) {
+      addUnique({
+        name: r.poi?.name || r.address?.freeformAddress || raw,
+        address: r.address?.freeformAddress || '',
+        lat: r.position.lat,
+        lng: r.position.lon,
+      });
+    }
+  } catch { /* fall through to Photon */ }
+
+  // 3. OpenStreetMap Photon fallback if fewer than 3 hits
+  if (merged.length < 3) {
+    try {
+      const pUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(raw + ' Bengaluru')}&lat=${center.lat}&lon=${center.lng}&limit=5`;
+      const res = await fetch(pUrl, { headers: { Accept: 'application/json' } });
+      if (res.ok) {
+        const pd = await res.json();
+        for (const f of pd.features || []) {
+          const [lng, lat] = f.geometry?.coordinates || [];
+          const pr = f.properties || {};
+          if (lat != null && lng != null && haversineKm(center, { lat, lng }) < 60) {
+            addUnique({
+              name: pr.name || pr.street || raw,
+              address: [pr.district || pr.locality, pr.city, pr.state].filter(Boolean).join(', '),
+              lat,
+              lng,
+            });
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  return merged.slice(0, 6);
 }
 
 export async function fetchTomTomRoute(origin, dest, departAtISO) {
