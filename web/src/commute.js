@@ -85,7 +85,7 @@ export const BLR_LOCALITY_SLUGS = [
   { slug: 'bellandur', name: 'Bellandur', lat: 12.9259, lng: 77.6762 },
   { slug: 'hsr-layout', name: 'HSR Layout', lat: 12.9121, lng: 77.6446 },
   { slug: 'koramangala', name: 'Koramangala', lat: 12.9352, lng: 77.6245 },
-  { slug: 'indiranagar', name: 'Indiranagar', lat: 12.9784, lng: 77.6408 },
+  { slug: 'indira-nagar', name: 'Indiranagar', lat: 12.9784, lng: 77.6408 },
   { slug: 'whitefield', name: 'Whitefield', lat: 12.9698, lng: 77.7500 },
   { slug: 'marathahalli', name: 'Marathahalli', lat: 12.9591, lng: 77.6974 },
   { slug: 'sarjapur-road', name: 'Sarjapur Road', lat: 12.9081, lng: 77.6858 },

@@ -24,7 +24,7 @@ function normId(slug, name) {
   return `live-${slug}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 42)}`;
 }
 
-export async function onRequest({ request }) {
+export async function onRequest({ request, env }) {
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, OPTIONS' } });
   }
@@ -34,6 +34,22 @@ export async function onRequest({ request }) {
   if (!slug || !SLUG_RE.test(slug) || !SLUG_RE.test(city)) {
     return new Response(JSON.stringify({ error: 'Invalid slug or city' }), { status: 400, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
   }
+
+  // 1. Serve pre-fetched on-demand area shard from Cloudflare Pages assets (instant, zero WAF blocks)
+  try {
+    const assetRes = await env.ASSETS.fetch(new Request(`${u.origin}/data/areas/${city}/${slug}.json`));
+    if (assetRes.ok) {
+      const body = await assetRes.text();
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'access-control-allow-origin': '*',
+          'cache-control': 'public, max-age=1800',
+        },
+      });
+    }
+  } catch { /* fall through to live fetch */ }
 
   const target = `https://www.magicbricks.com/flats-for-rent-in-${slug}-${city}-pppfr`;
   try {
@@ -45,14 +61,17 @@ export async function onRequest({ request }) {
       });
     }
     const html = await res.text();
-    const m = html.match(/window\.SERVER_PRELOADED_STATE_\s*=\s*(\{[\s\S]*?\});\s*<\/script>/);
-    if (!m) {
-      return new Response(JSON.stringify({ slug, societies: [], raw_count: 0 }), {
+    const marker = html.indexOf('window.SERVER_PRELOADED_STATE_');
+    const jsonStart = marker >= 0 ? html.indexOf('{', marker) : -1;
+    const scriptEnd = jsonStart >= 0 ? html.indexOf('</script>', jsonStart) : -1;
+    if (jsonStart < 0 || scriptEnd < 0) {
+      return new Response(JSON.stringify({ slug, societies: [], raw_count: 0, html_len: html.length }), {
         status: 200,
         headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
       });
     }
-    const state = JSON.parse(m[1]);
+    const rawJson = html.slice(jsonStart, scriptEnd).trim().replace(/;+$/, '');
+    const state = JSON.parse(rawJson);
     const list = Array.isArray(state.searchResult) ? state.searchResult : [];
 
     // Group individual rental listings by society name
